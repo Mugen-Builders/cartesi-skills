@@ -1,5 +1,5 @@
 ---
-name: cartesi-rollups-frontend
+name: cartesi-frontend
 description: >-
   Build Cartesi Rollups v2 frontend applications with clear module boundaries
   and predictable runtime behavior: wallet integration, app I/O, configuration,
@@ -29,7 +29,7 @@ Use vanilla CSS by default. Only switch UI styling approach if the user provides
 When frontend design directions conflict, apply this order:
 
 1. User's explicit request in the current chat.
-2. Project `DESIGN.md` (for example `cartesi-rollups-frontend/DESIGN.md`).
+2. Project `DESIGN.md` (for example `cartesi-frontend/DESIGN.md`).
 3. This `SKILL.md` default UI guidance (vanilla CSS, simple components).
 
 If a developer wants a different design and provides/updates `DESIGN.md`, that file overrides this skill's default styling guidance.

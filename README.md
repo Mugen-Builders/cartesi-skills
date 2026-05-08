@@ -4,8 +4,13 @@ Reusable skill packs for AI coding agents building with Cartesi Rollups.
 
 ## What is in this repo
 
-- `cartesi-rollups-backend/` - backend-focused skill guidance for Rollups app logic and runtime workflows.
-- `cartesi-rollups-frontend/` - frontend-focused skill guidance for wallet, InputBox, JSON-RPC, inspect, and UI conventions.
+- `cartesi-frontend/` - frontend-focused skill guidance for wallet, InputBox, JSON-RPC, inspect, and UI conventions.
+- `cartesi-backend-core/` - language-agnostic backend core skill for `advance_state`, `inspect_state`, payload contracts, and finish-loop correctness.
+- `cartesi-python-backend/` - Python-focused backend implementation skill.
+- `cartesi-js-backend/` - JavaScript/TypeScript-focused backend implementation skill.
+- `cartesi-l1-contracts/` - Solidity/Foundry skill for InputBox integrations and L1 wiring.
+- `cartesi-local-dev/` - local and forked development workflow and troubleshooting skill.
+- `cartesi-deploy/` - deployment and operations skill for local/forked/self-hosted environments.
 
 Each skill is defined in a `SKILL.md` file and can include supporting docs (for example `DESIGN.md`).
 
@@ -20,9 +25,14 @@ Most agent systems use a "skill" file as instruction context during generation.
 
 ## Suggested usage pattern
 
-- **Backend tasks:** include `cartesi-rollups-backend/SKILL.md`.
-- **Frontend tasks:** include `cartesi-rollups-frontend/SKILL.md`.
-- **Custom UI requests:** include `cartesi-rollups-frontend/DESIGN.md` to override default styling guidance.
+- **Backend (language-agnostic core):** include `cartesi-backend-core/SKILL.md`.
+- **Backend (Python):** include `cartesi-python-backend/SKILL.md` (plus backend core).
+- **Backend (JS/TS):** include `cartesi-js-backend/SKILL.md` (plus backend core).
+- **Frontend tasks:** include `cartesi-frontend/SKILL.md`.
+- **L1 contract tasks:** include `cartesi-l1-contracts/SKILL.md`.
+- **Local dev/fork debugging:** include `cartesi-local-dev/SKILL.md`.
+- **Deployment tasks:** include `cartesi-deploy/SKILL.md`.
+- **Custom UI requests:** include `cartesi-frontend/DESIGN.md` to override default styling guidance.
 
 ## Notes
 
