@@ -1,6 +1,6 @@
 ---
 name: cartesi-local-dev
-version: 1.0.0
+version: 0.1.0
 description: >-
   Run, test, and iterate on a Cartesi Rollups v2 application locally. Covers
   CLI version detection, building the Cartesi Machine image, running a local
@@ -17,7 +17,7 @@ description: >-
 
 | Skill               | Version | Cartesi Rollups target               | Contract suite         | Last updated |
 | ------------------- | ------- | ------------------------------------ | ---------------------- | ------------ |
-| `cartesi-local-dev` | `1.0.0` | v2.0-alpha (CLI v1.5 and v2.0-alpha) | cartesi-rollups v2.2.0 | May 2026     |
+| `cartesi-local-dev` | `0.1.0` | v2.0-alpha (CLI v1.5 and v2.0-alpha) | cartesi-rollups v2.2.0 | May 2026     |
 
 > **Important**: `cartesi-rollups-cli` is NOT available when using `cartesi run`. It only exists inside the Docker containers of a compose-based self-hosted deployment. All read/inspect commands in this skill use `curl` and the JSON-RPC API for the `cartesi run` workflow.
 

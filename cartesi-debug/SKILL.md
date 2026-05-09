@@ -1,6 +1,6 @@
 ---
 name: cartesi-debug
-version: 1.0.0
+version: 0.1.0
 description: >-
   Diagnose and fix errors across the Cartesi Rollups v2 stack. Use this
   whenever the user hits an error, unexpected behaviour, or a failed operation
@@ -15,9 +15,9 @@ description: >-
 
 ## Skill Version
 
-| Skill | Version | Cartesi Rollups target | Compose setup | Last updated |
-|-------|---------|------------------------|---------------|--------------|
-| `cartesi-debug` | `1.0.0` | v2.0-alpha (CLI v1.5 and v2.0-alpha) | Mugen-Builders v2.0 | May 2026 |
+| Skill           | Version | Cartesi Rollups target               | Compose setup       | Last updated |
+| --------------- | ------- | ------------------------------------ | ------------------- | ------------ |
+| `cartesi-debug` | `0.1.0  | v2.0-alpha (CLI v1.5 and v2.0-alpha) | Mugen-Builders v2.0 | May 2026     |
 
 > Error messages, command names, and Dockerfile markers documented here target CLI v1.5 and v2.0-alpha. If the user is on a newer CLI version, some symptoms or fixes may have changed — always start diagnosis with `cartesi --version`.
 
@@ -46,6 +46,7 @@ error: unknown command 'deploy'
 v2.0-alpha**. It was removed. Deployment in v2 is done via Docker Compose.
 
 **Fix**: Use the `cartesi-deploy` skill. The correct deployment flow is:
+
 1. `cartesi build` to build the machine snapshot
 2. Download `compose.local.yaml` from the Mugen-Builders repo
 3. Create `.env` with your chain configuration
@@ -56,16 +57,19 @@ v2.0-alpha**. It was removed. Deployment in v2 is done via Docker Compose.
 ### Symptom: Unknown command or flag not recognised
 
 Check which CLI version is installed:
+
 ```sh
 cartesi --version
 ```
 
 Then check available commands:
+
 ```sh
 cartesi --help
 ```
 
 If the user has both versions installed:
+
 ```sh
 cartesi --version    # v1.5
 cartesi --version   # v2.0-alpha prints e.g. 2.0.0-alpha.x
@@ -82,25 +86,26 @@ vice versa. Identify the project version:
 grep -E "MACHINE_EMULATOR_TOOLS_VERSION|MACHINE_GUEST_TOOLS_VERSION" Dockerfile
 ```
 
-| Match                            | Project version | Correct CLI       |
-|----------------------------------|-----------------|-------------------|
-| `MACHINE_EMULATOR_TOOLS_VERSION` | v1.5            | `cartesi` (v1.5)  |
-| `MACHINE_GUEST_TOOLS_VERSION`    | v2.0-alpha      | `cartesi` (v2.0-alpha installed)   |
+| Match                            | Project version | Correct CLI                      |
+| -------------------------------- | --------------- | -------------------------------- |
+| `MACHINE_EMULATOR_TOOLS_VERSION` | v1.5            | `cartesi` (v1.5)                 |
+| `MACHINE_GUEST_TOOLS_VERSION`    | v2.0-alpha      | `cartesi` (v2.0-alpha installed) |
 
 Additional Dockerfile signals that confirm the version:
 
-| Signal in Dockerfile                 | Version            |
-|--------------------------------------|--------------------|
-| `cartesi/python:3.10-slim-jammy`     | v1.5 base image    |
-| `cartesi/python:3.13.2-slim-noble`   | v2.0-alpha base    |
-| Single-stage build                   | v1.5 pattern       |
-| Multi-stage build (`AS base`)        | v2.0-alpha pattern |
-| `APT_UPDATE_SNAPSHOT=...`            | v2.0-alpha only    |
-| `ENTRYPOINT ["rollup-init"]`         | v1.5 only          |
-| Tools installed as `.deb` package    | v2.0-alpha         |
-| Tools installed as `.tar.gz`         | v1.5               |
+| Signal in Dockerfile               | Version            |
+| ---------------------------------- | ------------------ |
+| `cartesi/python:3.10-slim-jammy`   | v1.5 base image    |
+| `cartesi/python:3.13.2-slim-noble` | v2.0-alpha base    |
+| Single-stage build                 | v1.5 pattern       |
+| Multi-stage build (`AS base`)      | v2.0-alpha pattern |
+| `APT_UPDATE_SNAPSHOT=...`          | v2.0-alpha only    |
+| `ENTRYPOINT ["rollup-init"]`       | v1.5 only          |
+| Tools installed as `.deb` package  | v2.0-alpha         |
+| Tools installed as `.tar.gz`       | v1.5               |
 
 If the wrong CLI was used to build, clean the build and rebuild:
+
 ```sh
 rm -rf .cartesi/image/
 cartesi build
@@ -119,6 +124,7 @@ cast send <InputBox-address> \
 ```
 
 Or use the `cartesi-rollups-cli send` command inside the compose advancer:
+
 ```sh
 docker compose -f compose.local.yaml exec advancer \
   cartesi-rollups-cli send <app-name> "your-payload"
@@ -131,12 +137,15 @@ docker compose -f compose.local.yaml exec advancer \
 ### Symptom: `cartesi build` fails immediately
 
 **Check Docker is running:**
+
 ```sh
 docker info
 ```
+
 If Docker is not running, start Docker Desktop or the daemon.
 
 **Check Cartesi CLI is installed:**
+
 ```sh
 cartesi --version
 ```
@@ -155,6 +164,7 @@ RUN apt-get update && apt-get install -y libsomething
 ```
 
 After fixing the Dockerfile, rebuild:
+
 ```sh
 cartesi build
 ```
@@ -163,6 +173,7 @@ cartesi build
 
 Check the Dockerfile base image matches the language version you're using.
 For Node.js:
+
 ```dockerfile
 FROM node:20-alpine   # pin the version explicitly
 ```
@@ -198,6 +209,7 @@ defaults. Update all CLI commands and frontend proxies to use the printed ports.
 ### Symptom: State seems unchanged after advance input
 
 Possible causes:
+
 1. **Input rejected**: the backend returned `"reject"`. Read reports to see
    the error:
    ```sh
@@ -219,6 +231,7 @@ error: failed to connect to postgres
 ```
 
 Checks:
+
 1. Is Postgres running?
    ```sh
    docker ps | grep postgres
@@ -244,11 +257,13 @@ error: service exceeded max startup time
 ```
 
 Increase the startup timeout:
+
 ```sh
 export CARTESI_MAX_STARTUP_TIME=60
 ```
 
 Check logs for underlying cause before increasing:
+
 ```sh
 export CARTESI_LOG_LEVEL=debug
 cartesi-rollups-node
@@ -261,6 +276,7 @@ error: failed to connect to blockchain HTTP endpoint
 ```
 
 Checks:
+
 1. Is the RPC endpoint correct and reachable?
    ```sh
    curl -s http://localhost:8545 -X POST \
@@ -278,14 +294,17 @@ Checks:
 
 The wallet derived from `CARTESI_AUTH_MNEMONIC` has no ETH on the target chain.
 For Anvil devnet, use the default funded mnemonic:
+
 ```sh
 export CARTESI_AUTH_MNEMONIC="test test test test test test test test test test test junk"
 ```
+
 For testnets, fund the address from a faucet.
 
 ### Symptom: `deploy application` fails with unknown selector / revert
 
 Check:
+
 1. Contract addresses match the target chain. Verify with:
    ```sh
    cartesi address-book
@@ -297,6 +316,7 @@ Check:
 
 If deploying the same app image with the same owner address again, the
 contract address will collide. Use a different salt:
+
 ```sh
 cartesi-rollups-cli deploy application myapp .cartesi/image/ \
   --salt $(cast keccak "your-unique-string-$(date +%s)")
@@ -305,10 +325,13 @@ cartesi-rollups-cli deploy application myapp .cartesi/image/ \
 ### Symptom: `deploy application` succeeds but app is not processing inputs
 
 The application must be **enabled** on the node. Check status:
+
 ```sh
 cartesi-rollups-cli app status myapp
 ```
+
 If disabled, enable it:
+
 ```sh
 cartesi-rollups-cli app status myapp enabled
 ```
@@ -320,17 +343,20 @@ cartesi-rollups-cli app status myapp enabled
 ### Symptom: Input sent but never appears in node reads
 
 Check if the EVM Reader is reading the correct InputBox address:
+
 ```sh
 echo $CARTESI_CONTRACTS_INPUT_BOX_ADDRESS
 # Should match the address on the target chain
 ```
 
 Check the node logs for EVM Reader activity:
+
 ```sh
 export CARTESI_LOG_LEVEL=debug
 ```
 
 Verify the input was actually submitted on-chain:
+
 ```sh
 cast logs \
   --address <InputBox-address> \
@@ -342,12 +368,14 @@ cast logs \
 ### Symptom: Input appears in node but state is wrong
 
 Read reports for that input to see what the backend returned:
+
 ```sh
 cartesi-rollups-cli read reports <app-name>
 ```
 
 If the report shows a backend error, the issue is in the advance handler.
 Add more logging inside the handler and rebuild:
+
 ```sh
 cartesi build && cartesi run
 ```
@@ -357,6 +385,7 @@ cartesi build && cartesi run
 The wallet/signer chain ID does not match the RPC endpoint's chain ID.
 
 Fix: align `CARTESI_BLOCKCHAIN_ID` with the RPC chain:
+
 ```sh
 # Check actual chain ID from RPC
 cast chain-id --rpc-url http://localhost:8545
@@ -391,6 +420,7 @@ Wait for advance processing to complete, then re-inspect.
 ### Symptom: Parallel inspects fail or timeout
 
 Increase `max_concurrent_inspects` in execution parameters:
+
 ```sh
 cartesi-rollups-cli app execution-parameters set myapp max_concurrent_inspects 20
 ```
@@ -403,12 +433,14 @@ cartesi-rollups-cli app execution-parameters set myapp max_concurrent_inspects 2
 
 Expected behaviour. A forked chain is static at the chosen block height.
 To test changing data:
+
 - Re-fork at a later block: `cartesi run --fork-url <RPC> --fork-block-number <N>`
 - Or send advance inputs directly (bypassing L1) to simulate data changes.
 
 ### Symptom: Fork not loading the correct state
 
 Confirm the RPC URL supports historical state at the chosen block:
+
 ```sh
 cast block <block-number> --rpc-url <RPC_URL>
 ```
@@ -420,6 +452,7 @@ cast block <block-number> --rpc-url <RPC_URL>
 ### Symptom: Voucher cannot be executed — epoch not yet accepted
 
 Vouchers require the epoch to be closed and the claim accepted. Check:
+
 ```sh
 cartesi-rollups-cli read epochs <app-name>
 # Look for CLAIM_ACCEPTED status
@@ -481,20 +514,20 @@ https://www.4byte.directory/ — paste the 4-byte selector to identify the error
 
 ## Common error quick reference
 
-| Error message                          | Cause                                | Fix                                          |
-|----------------------------------------|--------------------------------------|----------------------------------------------|
-| `unknown command 'deploy'`             | `cartesi deploy` removed in v2 alpha | Use Docker Compose deployment (`cartesi-deploy` skill) |
-| `cartesi send` not found               | May not exist in v2.0-alpha          | Use `cast send` or `cartesi-rollups-cli send` inside container |
-| Image incompatible with node           | CLI version mismatch                 | Check Dockerfile for `MACHINE_EMULATOR_TOOLS_VERSION` vs `MACHINE_GUEST_TOOLS_VERSION` |
-| `application name is already in use`  | Old Docker Compose project running   | `docker compose -p <app> down`               |
-| `invalid chain id for signer`          | Chain ID mismatch                    | Align `CARTESI_BLOCKCHAIN_ID` with RPC       |
-| `failed to connect to postgres`        | DB not running or wrong URL          | Check Postgres + `CARTESI_DATABASE_CONNECTION`|
-| `service exceeded max startup time`    | Slow startup or dependency issue     | Increase `CARTESI_MAX_STARTUP_TIME`, check logs|
-| `insufficient funds`                   | Wallet has no ETH                    | Fund wallet or use Anvil default mnemonic     |
-| Inspect returns no reports             | Handler not emitting report          | Always emit a report, even on error           |
-| State unchanged after advance          | Input rejected or still processing   | Read reports, check handler return value      |
-| Voucher not executable                 | Epoch not yet accepted               | Wait for `CLAIM_ACCEPTED` epoch status        |
-| Unknown 4-byte selector in revert      | Missing custom error ABI             | Add custom errors to ABI, check 4byte.directory|
+| Error message                        | Cause                                | Fix                                                                                    |
+| ------------------------------------ | ------------------------------------ | -------------------------------------------------------------------------------------- |
+| `unknown command 'deploy'`           | `cartesi deploy` removed in v2 alpha | Use Docker Compose deployment (`cartesi-deploy` skill)                                 |
+| `cartesi send` not found             | May not exist in v2.0-alpha          | Use `cast send` or `cartesi-rollups-cli send` inside container                         |
+| Image incompatible with node         | CLI version mismatch                 | Check Dockerfile for `MACHINE_EMULATOR_TOOLS_VERSION` vs `MACHINE_GUEST_TOOLS_VERSION` |
+| `application name is already in use` | Old Docker Compose project running   | `docker compose -p <app> down`                                                         |
+| `invalid chain id for signer`        | Chain ID mismatch                    | Align `CARTESI_BLOCKCHAIN_ID` with RPC                                                 |
+| `failed to connect to postgres`      | DB not running or wrong URL          | Check Postgres + `CARTESI_DATABASE_CONNECTION`                                         |
+| `service exceeded max startup time`  | Slow startup or dependency issue     | Increase `CARTESI_MAX_STARTUP_TIME`, check logs                                        |
+| `insufficient funds`                 | Wallet has no ETH                    | Fund wallet or use Anvil default mnemonic                                              |
+| Inspect returns no reports           | Handler not emitting report          | Always emit a report, even on error                                                    |
+| State unchanged after advance        | Input rejected or still processing   | Read reports, check handler return value                                               |
+| Voucher not executable               | Epoch not yet accepted               | Wait for `CLAIM_ACCEPTED` epoch status                                                 |
+| Unknown 4-byte selector in revert    | Missing custom error ABI             | Add custom errors to ABI, check 4byte.directory                                        |
 
 ---
 
@@ -511,13 +544,13 @@ After completing this skill, report back to the user with:
 
 ## Routing Guide
 
-| What the user wants to do after fixing the issue    | Go to skill            |
-|-----------------------------------------------------|------------------------|
-| Rebuild and redeploy after fixing build or code     | `cartesi-deploy`       |
-| Resume local testing (`cartesi run`)                | `cartesi-local-dev`    |
-| Fix L1 contract revert or InputBox interaction      | `cartesi-l1-contracts` |
-| Re-implement the advance/inspect handler            | `cartesi-backend`      |
-| Query outputs after node is healthy                 | `cartesi-jsonrpc`      |
+| What the user wants to do after fixing the issue | Go to skill            |
+| ------------------------------------------------ | ---------------------- |
+| Rebuild and redeploy after fixing build or code  | `cartesi-deploy`       |
+| Resume local testing (`cartesi run`)             | `cartesi-local-dev`    |
+| Fix L1 contract revert or InputBox interaction   | `cartesi-l1-contracts` |
+| Re-implement the advance/inspect handler         | `cartesi-backend`      |
+| Query outputs after node is healthy              | `cartesi-jsonrpc`      |
 
 ## Resources
 
@@ -544,7 +577,7 @@ After completing this skill, report back to the user with:
 
 ## What comes next
 
-| Resolved issue                    | Skill to use          |
-|-----------------------------------|-----------------------|
-| Re-deploy after fixing build      | `cartesi-deploy`      |
-| Resume local testing              | `cartesi-local-dev`   |
+| Resolved issue               | Skill to use        |
+| ---------------------------- | ------------------- |
+| Re-deploy after fixing build | `cartesi-deploy`    |
+| Resume local testing         | `cartesi-local-dev` |

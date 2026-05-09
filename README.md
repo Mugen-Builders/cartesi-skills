@@ -4,13 +4,16 @@ Reusable skill packs for AI coding agents building with Cartesi Rollups.
 
 ## What is in this repo
 
+- `cartesi-scaffold/` - scaffold a new Cartesi Rollups v2 app from scratch; covers CLI version detection, `cartesi create`, and initial file layout.
 - `cartesi-frontend/` - frontend-focused skill guidance for wallet, InputBox, JSON-RPC, inspect, and UI conventions.
 - `cartesi-backend-core/` - language-agnostic backend core skill for `advance_state`, `inspect_state`, payload contracts, and finish-loop correctness.
 - `cartesi-python-backend/` - Python-focused backend implementation skill.
 - `cartesi-js-backend/` - JavaScript/TypeScript-focused backend implementation skill.
-- `cartesi-l1-contracts/` - Solidity/Foundry skill for InputBox integrations and L1 wiring.
-- `cartesi-local-dev/` - local and forked development workflow and troubleshooting skill.
-- `cartesi-deploy/` - deployment and operations skill for local/forked/self-hosted environments.
+- `cartesi-l1-contracts/` - Solidity/Foundry skill for InputBox integrations, asset portals, voucher execution, and L1 wiring.
+- `cartesi-local-dev/` - local and forked development workflow: build, run, advance/inspect, devnet tokens, and forked chain testing.
+- `cartesi-deploy/` - deployment and operations skill for self-hosted environments; covers the full Docker Compose flow.
+- `cartesi-jsonrpc/` - query a running node via the JSON-RPC 2.0 API (port 10011); full method reference with TypeScript types.
+- `cartesi-debug/` - diagnose and fix errors across the full Cartesi stack, organised by layer and symptom.
 
 Each skill is defined in a `SKILL.md` file and can include supporting docs (for example `DESIGN.md`).
 
@@ -25,13 +28,16 @@ Most agent systems use a "skill" file as instruction context during generation.
 
 ## Suggested usage pattern
 
+- **Starting a new project:** include `cartesi-scaffold/SKILL.md`.
 - **Backend (language-agnostic core):** include `cartesi-backend-core/SKILL.md`.
 - **Backend (Python):** include `cartesi-python-backend/SKILL.md` (plus backend core).
 - **Backend (JS/TS):** include `cartesi-js-backend/SKILL.md` (plus backend core).
 - **Frontend tasks:** include `cartesi-frontend/SKILL.md`.
 - **L1 contract tasks:** include `cartesi-l1-contracts/SKILL.md`.
-- **Local dev/fork debugging:** include `cartesi-local-dev/SKILL.md`.
+- **Local dev/fork testing:** include `cartesi-local-dev/SKILL.md`.
 - **Deployment tasks:** include `cartesi-deploy/SKILL.md`.
+- **Querying node outputs programmatically:** include `cartesi-jsonrpc/SKILL.md`.
+- **Debugging errors or unexpected behaviour:** include `cartesi-debug/SKILL.md`.
 - **Custom UI requests:** include `cartesi-frontend/DESIGN.md` to override default styling guidance.
 
 ## Notes

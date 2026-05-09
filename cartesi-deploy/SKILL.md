@@ -1,6 +1,6 @@
 ---
 name: cartesi-deploy
-version: 1.0.0
+version: 0.1.0
 description: >-
   Deploy a Cartesi Rollups v2 application to a self-hosted rollups node for
   testnet or production-style deployment using Docker Compose. Covers CLI
@@ -18,7 +18,7 @@ description: >-
 
 | Skill            | Version | Cartesi Rollups target | Contract suite         | Compose setup       | Last updated |
 | ---------------- | ------- | ---------------------- | ---------------------- | ------------------- | ------------ |
-| `cartesi-deploy` | `1.0.0` | v2.0-alpha             | cartesi-rollups v2.2.0 | Mugen-Builders v2.0 | May 2026     |
+| `cartesi-deploy` | `0.1.0` | v2.0-alpha             | cartesi-rollups v2.2.0 | Mugen-Builders v2.0 | May 2026     |
 
 > This skill targets the Mugen-Builders `compose.local.yaml` setup and `cartesi-rollups-runtime:0.12.0-alpha.39`. If the compose file or runtime image has been updated, verify that service names, ports, and CLI commands still match. Contract addresses are for v2.2.0 — confirm against `compose.local.yaml` image tags before deploying.
 

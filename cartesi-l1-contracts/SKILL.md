@@ -1,6 +1,6 @@
 ---
 name: cartesi-l1-contracts
-version: 1.0.0
+version: 0.1.0
 description: >-
   Wire L1 smart contracts into a Cartesi Rollups v2 application via the
   InputBox contract. Use this when the user needs inputs to originate from
@@ -16,7 +16,7 @@ description: >-
 
 | Skill                  | Version | Cartesi Rollups target | Contract suite         | Last updated |
 | ---------------------- | ------- | ---------------------- | ---------------------- | ------------ |
-| `cartesi-l1-contracts` | `1.0.0` | v2.0-alpha             | cartesi-rollups v2.2.0 | May 2026     |
+| `cartesi-l1-contracts` | `0.1.0` | v2.0-alpha             | cartesi-rollups v2.2.0 | May 2026     |
 
 > Contract addresses in this skill are for **cartesi-rollups v2.2.0**. If the node is running a newer contract suite, the addresses will differ — check `compose.local.yaml` image tags and update accordingly. For local devnet, always resolve addresses from `cartesi address-book`.
 

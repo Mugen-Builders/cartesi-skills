@@ -1,6 +1,6 @@
 ---
 name: cartesi-jsonrpc
-version: 1.0.0
+version: 0.1.0
 description: >-
   Query a running Cartesi Rollups v2 node via its JSON-RPC 2.0 API (port 10011).
   Use this whenever you need to list or fetch applications, epochs, inputs,
@@ -15,9 +15,9 @@ description: >-
 
 ## Skill Version
 
-| Skill | Version | Cartesi Rollups target | Node runtime | Last updated |
-|-------|---------|------------------------|--------------|--------------|
-| `cartesi-jsonrpc` | `1.0.0` | v2.0-alpha | `cartesi-rollups-runtime:0.12.0-alpha.39` | May 2026 |
+| Skill             | Version | Cartesi Rollups target | Node runtime                              | Last updated |
+| ----------------- | ------- | ---------------------- | ----------------------------------------- | ------------ |
+| `cartesi-jsonrpc` | `0.1.0` | v2.0-alpha             | `cartesi-rollups-runtime:0.12.0-alpha.39` | May 2026     |
 
 > All `cartesi_` method names, parameter types, and response shapes documented here target the runtime above. If the node has been updated to a newer runtime, verify that method names and response fields still match — especially `raw_data` encoding and pagination parameter names.
 
@@ -34,10 +34,10 @@ frontends, or automated monitoring tools.
 
 ## Connection details
 
-| Setup             | Endpoint                            |
-|-------------------|-------------------------------------|
-| `cartesi run`     | `http://localhost:<port>/rpc`        |
-| Self-hosted node  | `http://localhost:10011/rpc`        |
+| Setup            | Endpoint                      |
+| ---------------- | ----------------------------- |
+| `cartesi run`    | `http://localhost:<port>/rpc` |
+| Self-hosted node | `http://localhost:10011/rpc`  |
 
 > **`cartesi run`**: Read the actual port from the startup output — it may
 > differ from the defaults. The JSON-RPC endpoint is always at `/rpc` on
@@ -76,6 +76,7 @@ All responses return either a `result` or an `error`:
 ```
 
 Error response:
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -116,11 +117,12 @@ cartesi_rpc '{
 All `cartesi_list*` methods support pagination:
 
 | Parameter | Type   | Default | Description                     |
-|-----------|--------|---------|---------------------------------|
+| --------- | ------ | ------- | ------------------------------- |
 | `limit`   | number | 50      | Maximum items per page (min: 1) |
 | `offset`  | number | 0       | Starting index                  |
 
 Response always includes a `pagination` object:
+
 ```json
 {
   "total_count": 150,
@@ -141,7 +143,8 @@ Returns all applications registered on this node.
 
 ```json
 {
-  "jsonrpc": "2.0", "id": 1,
+  "jsonrpc": "2.0",
+  "id": 1,
   "method": "cartesi_listApplications",
   "params": { "limit": 10, "offset": 0 }
 }
@@ -153,13 +156,15 @@ Fetch details for a single application by name or hex address.
 
 ```json
 {
-  "jsonrpc": "2.0", "id": 1,
+  "jsonrpc": "2.0",
+  "id": 1,
   "method": "cartesi_getApplication",
   "params": { "application": "my-dapp" }
 }
 ```
 
 Or by address:
+
 ```json
 { "application": "0xba3347e79665924033beeb7362629ca7992897d9" }
 ```
@@ -174,7 +179,8 @@ List epochs for an application. Optionally filter by status.
 
 ```json
 {
-  "jsonrpc": "2.0", "id": 1,
+  "jsonrpc": "2.0",
+  "id": 1,
   "method": "cartesi_listEpochs",
   "params": {
     "application": "my-dapp",
@@ -194,7 +200,8 @@ Fetch a specific epoch by index (hex encoded).
 
 ```json
 {
-  "jsonrpc": "2.0", "id": 1,
+  "jsonrpc": "2.0",
+  "id": 1,
   "method": "cartesi_getEpoch",
   "params": { "application": "my-dapp", "epoch_index": "0x0" }
 }
@@ -206,7 +213,8 @@ Get the index of the most recently accepted epoch (for voucher readiness checks)
 
 ```json
 {
-  "jsonrpc": "2.0", "id": 1,
+  "jsonrpc": "2.0",
+  "id": 1,
   "method": "cartesi_getLastAcceptedEpochIndex",
   "params": { "application": "my-dapp" }
 }
@@ -222,7 +230,8 @@ List inputs sent to an application. Supports filtering by epoch and sender.
 
 ```json
 {
-  "jsonrpc": "2.0", "id": 1,
+  "jsonrpc": "2.0",
+  "id": 1,
   "method": "cartesi_listInputs",
   "params": {
     "application": "my-dapp",
@@ -241,7 +250,8 @@ Fetch a specific input by index (hex encoded). The response includes the decoded
 
 ```json
 {
-  "jsonrpc": "2.0", "id": 1,
+  "jsonrpc": "2.0",
+  "id": 1,
   "method": "cartesi_getInput",
   "params": { "application": "my-dapp", "input_index": "0x0" }
 }
@@ -254,7 +264,8 @@ until a submitted input is confirmed.
 
 ```json
 {
-  "jsonrpc": "2.0", "id": 1,
+  "jsonrpc": "2.0",
+  "id": 1,
   "method": "cartesi_getProcessedInputCount",
   "params": { "application": "my-dapp" }
 }
@@ -273,7 +284,8 @@ List outputs with rich filtering options.
 
 ```json
 {
-  "jsonrpc": "2.0", "id": 1,
+  "jsonrpc": "2.0",
+  "id": 1,
   "method": "cartesi_listOutputs",
   "params": {
     "application": "my-dapp",
@@ -289,12 +301,12 @@ List outputs with rich filtering options.
 
 Filter parameters:
 
-| Parameter        | Description                                             |
-|------------------|---------------------------------------------------------|
-| `epoch_index`    | Filter by epoch (hex)                                   |
-| `input_index`    | Filter by the input that generated this output (hex)    |
-| `output_type`    | First 4 bytes of raw data hex — filters by function selector |
-| `voucher_address`| Filter vouchers destined for a specific contract        |
+| Parameter         | Description                                                  |
+| ----------------- | ------------------------------------------------------------ |
+| `epoch_index`     | Filter by epoch (hex)                                        |
+| `input_index`     | Filter by the input that generated this output (hex)         |
+| `output_type`     | First 4 bytes of raw data hex — filters by function selector |
+| `voucher_address` | Filter vouchers destined for a specific contract             |
 
 ### `cartesi_getOutput`
 
@@ -302,7 +314,8 @@ Fetch a specific output by global index.
 
 ```json
 {
-  "jsonrpc": "2.0", "id": 1,
+  "jsonrpc": "2.0",
+  "id": 1,
   "method": "cartesi_getOutput",
   "params": { "application": "my-dapp", "output_index": "0x2" }
 }
@@ -319,7 +332,8 @@ on-chain proof — use them for debug data, error messages, and read results.
 
 ```json
 {
-  "jsonrpc": "2.0", "id": 1,
+  "jsonrpc": "2.0",
+  "id": 1,
   "method": "cartesi_listReports",
   "params": {
     "application": "my-dapp",
@@ -335,7 +349,8 @@ on-chain proof — use them for debug data, error messages, and read results.
 
 ```json
 {
-  "jsonrpc": "2.0", "id": 1,
+  "jsonrpc": "2.0",
+  "id": 1,
   "method": "cartesi_getReport",
   "params": { "application": "my-dapp", "report_index": "0x0" }
 }
@@ -369,16 +384,16 @@ Returns the node's semantic version string.
 
 All hex values use these patterns:
 
-| Type              | Pattern                      | Example                                        |
-|-------------------|------------------------------|------------------------------------------------|
-| `EthereumAddress` | `^0x[a-fA-F0-9]{40}$`        | `"0x71C7656EC7ab88b098defB751B7401B5f6d8976F"` |
-| `Hash`            | `^0x[a-fA-F0-9]{64}$`        | `"0x1234...abcd"`                              |
-| `ByteArray`       | `^0x[a-fA-F0-9]*$`           | `"0x68656c6c6f"`                               |
-| `UnsignedInteger` | `^0x[a-fA-F0-9]{1,16}$`      | `"0x1"`                                        |
-| `FunctionSelector`| `^0x[a-fA-F0-9]{8}$`         | `"0xa9059cbb"`                                 |
-| `ApplicationName` | `^[a-z0-9_-]+$`              | `"my-dapp"`                                    |
-| `NameOrAddress`   | Either of the above two      | `"my-dapp"` or `"0x71C7...976F"`              |
-| `Timestamp`       | ISO 8601                     | `"2024-01-01T00:00:00Z"`                       |
+| Type               | Pattern                 | Example                                        |
+| ------------------ | ----------------------- | ---------------------------------------------- |
+| `EthereumAddress`  | `^0x[a-fA-F0-9]{40}$`   | `"0x71C7656EC7ab88b098defB751B7401B5f6d8976F"` |
+| `Hash`             | `^0x[a-fA-F0-9]{64}$`   | `"0x1234...abcd"`                              |
+| `ByteArray`        | `^0x[a-fA-F0-9]*$`      | `"0x68656c6c6f"`                               |
+| `UnsignedInteger`  | `^0x[a-fA-F0-9]{1,16}$` | `"0x1"`                                        |
+| `FunctionSelector` | `^0x[a-fA-F0-9]{8}$`    | `"0xa9059cbb"`                                 |
+| `ApplicationName`  | `^[a-z0-9_-]+$`         | `"my-dapp"`                                    |
+| `NameOrAddress`    | Either of the above two | `"my-dapp"` or `"0x71C7...976F"`               |
+| `Timestamp`        | ISO 8601                | `"2024-01-01T00:00:00Z"`                       |
 
 ### Enums
 
@@ -397,27 +412,27 @@ All hex values use these patterns:
 
 ```typescript
 interface Application {
-  name: string;                           // ApplicationName
-  iapplication_address: string;           // EthereumAddress
-  iconsensus_address: string;             // EthereumAddress
-  iinputbox_address: string;              // EthereumAddress
-  template_hash: string;                  // Hash
-  epoch_length: string;                   // UnsignedInteger
-  data_availability: string;              // ByteArray
+  name: string; // ApplicationName
+  iapplication_address: string; // EthereumAddress
+  iconsensus_address: string; // EthereumAddress
+  iinputbox_address: string; // EthereumAddress
+  template_hash: string; // Hash
+  epoch_length: string; // UnsignedInteger
+  data_availability: string; // ByteArray
   state: "ENABLED" | "DISABLED" | "INOPERABLE";
   reason: string;
-  iinputbox_block: string;                // UnsignedInteger
-  last_input_check_block: string;         // UnsignedInteger
-  last_output_check_block: string;        // UnsignedInteger
-  processed_inputs: string;              // UnsignedInteger
-  created_at: string;                     // ISO 8601
+  iinputbox_block: string; // UnsignedInteger
+  last_input_check_block: string; // UnsignedInteger
+  last_output_check_block: string; // UnsignedInteger
+  processed_inputs: string; // UnsignedInteger
+  created_at: string; // ISO 8601
   updated_at: string;
   execution_parameters: ExecutionParameters;
 }
 
 interface ExecutionParameters {
   snapshot_policy: "NONE" | "EVERY_INPUT" | "EVERY_EPOCH";
-  advance_inc_cycles: string;             // UnsignedInteger (nanoseconds)
+  advance_inc_cycles: string; // UnsignedInteger (nanoseconds)
   advance_max_cycles: string;
   inspect_inc_cycles: string;
   inspect_max_cycles: string;
@@ -434,49 +449,49 @@ interface ExecutionParameters {
 }
 
 interface Epoch {
-  index: string;                          // UnsignedInteger
-  first_block: string;                    // UnsignedInteger
-  last_block: string;                     // UnsignedInteger
-  claim_hash: string | null;              // Hash
-  claim_transaction_hash: string | null;  // Hash
+  index: string; // UnsignedInteger
+  first_block: string; // UnsignedInteger
+  last_block: string; // UnsignedInteger
+  claim_hash: string | null; // Hash
+  claim_transaction_hash: string | null; // Hash
   status: EpochStatus;
-  virtual_index: string;                  // UnsignedInteger
+  virtual_index: string; // UnsignedInteger
   created_at: string;
   updated_at: string;
 }
 
 interface Input {
-  epoch_index: string;                    // UnsignedInteger
-  index: string;                          // UnsignedInteger
-  block_number: string;                   // UnsignedInteger
-  raw_data: string;                       // ByteArray
+  epoch_index: string; // UnsignedInteger
+  index: string; // UnsignedInteger
+  block_number: string; // UnsignedInteger
+  raw_data: string; // ByteArray
   decoded_data: EvmAdvance | null;
   status: InputCompletionStatus;
-  machine_hash: string | null;            // Hash
-  outputs_hash: string | null;            // Hash
-  transaction_reference: string;          // ByteArray
+  machine_hash: string | null; // Hash
+  outputs_hash: string | null; // Hash
+  transaction_reference: string; // ByteArray
   created_at: string;
   updated_at: string;
 }
 
 interface EvmAdvance {
-  chain_id: string;                       // UnsignedInteger
-  application_contract: string;           // EthereumAddress
-  sender: string;                         // EthereumAddress
-  block_number: string;                   // UnsignedInteger
-  block_timestamp: string;                // UnsignedInteger (unix)
-  prev_randao: string;                    // ByteArray
-  index: string;                          // UnsignedInteger
-  payload: string;                        // ByteArray — your app data
+  chain_id: string; // UnsignedInteger
+  application_contract: string; // EthereumAddress
+  sender: string; // EthereumAddress
+  block_number: string; // UnsignedInteger
+  block_timestamp: string; // UnsignedInteger (unix)
+  prev_randao: string; // ByteArray
+  index: string; // UnsignedInteger
+  payload: string; // ByteArray — your app data
 }
 
 interface Output {
-  epoch_index: string;                    // UnsignedInteger
-  input_index: string;                    // UnsignedInteger
-  index: string;                          // UnsignedInteger (global)
-  raw_data: string;                       // ByteArray
+  epoch_index: string; // UnsignedInteger
+  input_index: string; // UnsignedInteger
+  index: string; // UnsignedInteger (global)
+  raw_data: string; // ByteArray
   decoded_data: Notice | Voucher | DelegateCallVoucher | null;
-  hash: string | null;                    // Hash (available after epoch close)
+  hash: string | null; // Hash (available after epoch close)
   output_hashes_siblings: string[] | null;
   execution_transaction_hash: string | null;
   created_at: string;
@@ -484,28 +499,28 @@ interface Output {
 }
 
 interface Notice {
-  type: string;                           // FunctionSelector
-  payload: string;                        // ByteArray — your notice data
+  type: string; // FunctionSelector
+  payload: string; // ByteArray — your notice data
 }
 
 interface Voucher {
-  type: string;                           // FunctionSelector
-  destination: string;                    // EthereumAddress — contract to call
-  value: string;                          // ETH value in wei (hex)
-  payload: string;                        // ByteArray — ABI-encoded call
+  type: string; // FunctionSelector
+  destination: string; // EthereumAddress — contract to call
+  value: string; // ETH value in wei (hex)
+  payload: string; // ByteArray — ABI-encoded call
 }
 
 interface DelegateCallVoucher {
-  type: string;                           // FunctionSelector
-  destination: string;                    // EthereumAddress
-  payload: string;                        // ByteArray — ABI-encoded call
+  type: string; // FunctionSelector
+  destination: string; // EthereumAddress
+  payload: string; // ByteArray — ABI-encoded call
 }
 
 interface Report {
-  epoch_index: string;                    // UnsignedInteger
-  input_index: string;                    // UnsignedInteger
-  index: string;                          // UnsignedInteger
-  raw_data: string;                       // ByteArray — your report data
+  epoch_index: string; // UnsignedInteger
+  input_index: string; // UnsignedInteger
+  index: string; // UnsignedInteger
+  raw_data: string; // ByteArray — your report data
   created_at: string;
   updated_at: string;
 }
@@ -528,14 +543,15 @@ async function waitForInputProcessed(
   rpcUrl: string,
   app: string,
   targetCount: number,
-  pollIntervalMs = 2000
+  pollIntervalMs = 2000,
 ): Promise<void> {
   while (true) {
     const res = await fetch(rpcUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        jsonrpc: "2.0", id: 1,
+        jsonrpc: "2.0",
+        id: 1,
         method: "cartesi_getProcessedInputCount",
         params: { application: app },
       }),
@@ -554,24 +570,26 @@ async function waitForInputProcessed(
 async function getReportsForInput(
   rpcUrl: string,
   app: string,
-  inputIndex: number
+  inputIndex: number,
 ): Promise<string[]> {
   const res = await fetch(rpcUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      jsonrpc: "2.0", id: 1,
+      jsonrpc: "2.0",
+      id: 1,
       method: "cartesi_listReports",
       params: {
         application: app,
         input_index: `0x${inputIndex.toString(16)}`,
-        limit: 100, offset: 0,
+        limit: 100,
+        offset: 0,
       },
     }),
   });
   const { result } = await res.json();
   return result.data.map((r: Report) =>
-    Buffer.from(r.raw_data.replace(/^0x/, ""), "hex").toString("utf8")
+    Buffer.from(r.raw_data.replace(/^0x/, ""), "hex").toString("utf8"),
   );
 }
 ```
@@ -582,13 +600,14 @@ async function getReportsForInput(
 async function isEpochAccepted(
   rpcUrl: string,
   app: string,
-  epochIndex: number
+  epochIndex: number,
 ): Promise<boolean> {
   const res = await fetch(rpcUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      jsonrpc: "2.0", id: 1,
+      jsonrpc: "2.0",
+      id: 1,
       method: "cartesi_getEpoch",
       params: {
         application: app,
@@ -613,7 +632,8 @@ async function getAllOutputs(rpcUrl: string, app: string): Promise<Output[]> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        jsonrpc: "2.0", id: 1,
+        jsonrpc: "2.0",
+        id: 1,
         method: "cartesi_listOutputs",
         params: { application: app, limit, offset },
       }),
@@ -656,13 +676,13 @@ async function rpcCall(rpcUrl: string, method: string, params: object) {
 
 Common error codes:
 
-| Code    | Meaning                                      |
-|---------|----------------------------------------------|
-| `-32700`| Parse error — invalid JSON sent              |
-| `-32600`| Invalid request — missing required field     |
-| `-32601`| Method not found                             |
-| `-32602`| Invalid params — check hex encoding, types   |
-| `-32000`| Server error — check node logs               |
+| Code     | Meaning                                    |
+| -------- | ------------------------------------------ |
+| `-32700` | Parse error — invalid JSON sent            |
+| `-32600` | Invalid request — missing required field   |
+| `-32601` | Method not found                           |
+| `-32602` | Invalid params — check hex encoding, types |
+| `-32000` | Server error — check node logs             |
 
 ---
 
@@ -681,13 +701,13 @@ After completing this skill, report back to the user with:
 
 ## Routing Guide
 
-| What the user wants to do next                        | Go to skill            |
-|-------------------------------------------------------|------------------------|
-| Execute a voucher on-chain after epoch is accepted    | `cartesi-l1-contracts` |
-| Deploy the node to testnet to start producing epochs  | `cartesi-deploy`       |
-| Debug why outputs are missing or inputs are rejected  | `cartesi-debug`        |
-| Implement backend logic that emits the outputs        | `cartesi-backend`      |
-| Test and send inputs locally before querying          | `cartesi-local-dev`    |
+| What the user wants to do next                       | Go to skill            |
+| ---------------------------------------------------- | ---------------------- |
+| Execute a voucher on-chain after epoch is accepted   | `cartesi-l1-contracts` |
+| Deploy the node to testnet to start producing epochs | `cartesi-deploy`       |
+| Debug why outputs are missing or inputs are rejected | `cartesi-debug`        |
+| Implement backend logic that emits the outputs       | `cartesi-backend`      |
+| Test and send inputs locally before querying         | `cartesi-local-dev`    |
 
 ## Resources
 
@@ -713,8 +733,8 @@ After completing this skill, report back to the user with:
 
 ## What comes next
 
-| Next task                         | Skill to use          |
-|-----------------------------------|-----------------------|
-| Execute vouchers on-chain         | `cartesi-l1-contracts`|
-| Deploy to self-hosted node        | `cartesi-deploy`      |
-| Debug node or query issues        | `cartesi-debug`       |
+| Next task                  | Skill to use           |
+| -------------------------- | ---------------------- |
+| Execute vouchers on-chain  | `cartesi-l1-contracts` |
+| Deploy to self-hosted node | `cartesi-deploy`       |
+| Debug node or query issues | `cartesi-debug`        |

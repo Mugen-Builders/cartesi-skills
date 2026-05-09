@@ -1,6 +1,6 @@
 ---
 name: cartesi-scaffold
-version: 1.0.0
+version: 0.1.0
 description: >-
   Scaffold a new Cartesi Rollups v2 application from scratch using the Cartesi
   CLI. Use this whenever a user wants to create a new Cartesi dApp, set up the
@@ -14,9 +14,9 @@ description: >-
 
 ## Skill Version
 
-| Skill | Version | Cartesi Rollups target | Last updated |
-|-------|---------|------------------------|--------------|
-| `cartesi-scaffold` | `1.0.0` | v2.0-alpha (CLI v1.5 and v2.0-alpha) | May 2026 |
+| Skill              | Version | Cartesi Rollups target               | Last updated |
+| ------------------ | ------- | ------------------------------------ | ------------ |
+| `cartesi-scaffold` | `0.1.0` | v2.0-alpha (CLI v1.5 and v2.0-alpha) | May 2026     |
 
 > If you are using a newer version of Cartesi Rollups, check whether an updated skill is available. Scaffold steps are generally stable across minor CLI bumps, but always verify with `cartesi --version`.
 
@@ -42,11 +42,10 @@ has before running any commands.
 cartesi --version
 ```
 
-| Output          | Version     | Key differences                                         |
-|-----------------|-------------|---------------------------------------------------------|
-| `1.5.x`         | **v1.5**    | Supports `cartesi deploy`; uses `MACHINE_EMULATOR_TOOLS_VERSION` in Dockerfile |
+| Output          | Version        | Key differences                                                                                      |
+| --------------- | -------------- | ---------------------------------------------------------------------------------------------------- |
+| `1.5.x`         | **v1.5**       | Supports `cartesi deploy`; uses `MACHINE_EMULATOR_TOOLS_VERSION` in Dockerfile                       |
 | `2.0.0-alpha.x` | **v2.0-alpha** | No `cartesi deploy`; uses `MACHINE_GUEST_TOOLS_VERSION` in Dockerfile; deployment via Docker Compose |
-
 
 ### Identify project version from an existing Dockerfile
 
@@ -56,9 +55,9 @@ If working with an existing project rather than creating a new one:
 grep -E "MACHINE_EMULATOR_TOOLS_VERSION|MACHINE_GUEST_TOOLS_VERSION" Dockerfile
 ```
 
-| Match                                    | Project targets    |
-|------------------------------------------|--------------------|
-| `MACHINE_EMULATOR_TOOLS_VERSION=0.14.1`  | Cartesi **v1.5**   |
+| Match                                                      | Project targets        |
+| ---------------------------------------------------------- | ---------------------- |
+| `MACHINE_EMULATOR_TOOLS_VERSION=0.14.1`                    | Cartesi **v1.5**       |
 | `MACHINE_GUEST_TOOLS_VERSION=0.17.2` (or any higher alpha) | Cartesi **v2.0-alpha** |
 
 ---
@@ -77,6 +76,7 @@ If `cartesi` is not found, direct the user to the official installation guide:
 https://docs.cartesi.io/cartesi-rollups/2.0/development/installation/
 
 Install Cartesi CLI:
+
 ```sh
 npm install -g @cartesi/cli
 # or on macOS with Homebrew:
@@ -93,14 +93,14 @@ cartesi doctor
 Cartesi CLI supports multiple language templates. Ask the user which language
 they prefer if not already specified:
 
-| Template      | Flag                        | Best for                        |
-|---------------|-----------------------------|---------------------------------|
-| JavaScript    | `--template javascript`     | Quick prototypes, Node.js teams |
-| TypeScript    | `--template typescript`     | Typed JS backends               |
-| Python        | `--template python`         | Data-heavy or ML workloads      |
-| Rust          | `--template rust`           | Performance-critical apps       |
-| C++           | `--template cpp`            | Systems-level or legacy code    |
-| Lua           | `--template lua`            | Lightweight scripting           |
+| Template   | Flag                    | Best for                        |
+| ---------- | ----------------------- | ------------------------------- |
+| JavaScript | `--template javascript` | Quick prototypes, Node.js teams |
+| TypeScript | `--template typescript` | Typed JS backends               |
+| Python     | `--template python`     | Data-heavy or ML workloads      |
+| Rust       | `--template rust`       | Performance-critical apps       |
+| C++        | `--template cpp`        | Systems-level or legacy code    |
+| Lua        | `--template lua`        | Lightweight scripting           |
 
 ## Step 3 — Create the project
 
@@ -168,11 +168,13 @@ This compiles the application into a Cartesi Machine image at `.cartesi/image/`.
 A successful build confirms the scaffold is ready for handler implementation.
 
 Expected output ends with something like:
+
 ```
 Cartesi machine snapshot stored as .cartesi/image
 ```
 
 If the build fails, check:
+
 - Docker is running
 - The Dockerfile installs all required system packages
 - Language runtime version matches the Dockerfile base image
@@ -196,7 +198,7 @@ After completing this skill, report back to the user with:
 ## Routing Guide
 
 | What the user wants to do next           | Go to skill            |
-|------------------------------------------|------------------------|
+| ---------------------------------------- | ---------------------- |
 | Write advance and inspect handlers       | `cartesi-backend`      |
 | Run the app locally and send test inputs | `cartesi-local-dev`    |
 | Wire an L1 contract to InputBox          | `cartesi-l1-contracts` |
@@ -215,12 +217,12 @@ After completing this skill, report back to the user with:
 
 ## What comes next
 
-| Next task                              | Skill to use          |
-|----------------------------------------|-----------------------|
-| Implement advance/inspect handlers     | `cartesi-backend`     |
-| Run locally and test                   | `cartesi-local-dev`   |
-| Wire L1 contracts to InputBox          | `cartesi-l1-contracts`|
-| Deploy to a self-hosted rollups node   | `cartesi-deploy`      |
+| Next task                            | Skill to use           |
+| ------------------------------------ | ---------------------- |
+| Implement advance/inspect handlers   | `cartesi-backend`      |
+| Run locally and test                 | `cartesi-local-dev`    |
+| Wire L1 contracts to InputBox        | `cartesi-l1-contracts` |
+| Deploy to a self-hosted rollups node | `cartesi-deploy`       |
 
 ## Agent checklist
 
