@@ -1,5 +1,6 @@
 ---
 name: cartesi-backend-core
+version: 0.1.0
 description: >-
   Language-agnostic specification for Cartesi Rollups v2 backend application
   logic. Defines deterministic state transitions, payload contracts, finish-loop
@@ -64,8 +65,10 @@ This specification governs how backend applications:
 ## 4. Core execution model
 
 The backend MUST behave as a **deterministic state machine**:
-S(n+1) = f(S(n), input_n)
 
+```
+S(n+1) = f(S(n), input_n)
+```
 
 Where:
 

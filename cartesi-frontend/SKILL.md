@@ -1,5 +1,6 @@
 ---
 name: cartesi-frontend
+version: 0.1.0
 description: >-
   Build Cartesi Rollups v2 frontend applications with clear module boundaries
   and predictable runtime behavior: wallet integration, app I/O, configuration,

@@ -108,7 +108,8 @@ cartesi --version
 ```
 
 The application must already be scaffolded (`cartesi-scaffold`) and have
-backend handlers implemented (`cartesi-backend`).
+backend handlers implemented (`cartesi-backend-core` plus
+`cartesi-backend-py` or `cartesi-backend-js-ts`).
 
 ---
 
@@ -526,11 +527,11 @@ After completing this skill, report back to the user with:
 
 | What the user wants to do next                     | Go to skill            |
 | -------------------------------------------------- | ---------------------- |
-| Wire an L1 contract or oracle to the deployed app  | `cartesi-l1-contracts` |
+| Wire an L1 contract or oracle to the deployed app  | `cartesi-contracts` |
 | Query outputs and epochs via JSON-RPC API          | `cartesi-jsonrpc`      |
 | Debug node startup, advance processing, or inspect | `cartesi-debug`        |
 | Run app locally first before deploying to testnet  | `cartesi-local-dev`    |
-| Execute a voucher after epoch is accepted          | `cartesi-l1-contracts` |
+| Execute a voucher after epoch is accepted          | `cartesi-contracts` |
 
 ## Resources
 
@@ -559,5 +560,5 @@ After completing this skill, report back to the user with:
 
 | Next task                     | Skill to use           |
 | ----------------------------- | ---------------------- |
-| Wire L1 contracts to InputBox | `cartesi-l1-contracts` |
+| Wire L1 contracts to InputBox | `cartesi-contracts` |
 | Debug node or app issues      | `cartesi-debug`        |

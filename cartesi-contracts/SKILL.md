@@ -1,5 +1,5 @@
 ---
-name: cartesi-l1-contracts
+name: cartesi-contracts
 version: 0.1.0
 description: >-
   Wire L1 smart contracts into a Cartesi Rollups v2 application via the
@@ -14,9 +14,9 @@ description: >-
 
 ## Skill Version
 
-| Skill                  | Version | Cartesi Rollups target | Contract suite         | Last updated |
-| ---------------------- | ------- | ---------------------- | ---------------------- | ------------ |
-| `cartesi-l1-contracts` | `0.1.0` | v2.0-alpha             | cartesi-rollups v2.2.0 | May 2026     |
+| Skill               | Version | Cartesi Rollups target | Contract suite         | Last updated |
+| ------------------- | ------- | ---------------------- | ---------------------- | ------------ |
+| `cartesi-contracts` | `0.1.0` | v2.0-alpha             | cartesi-rollups v2.2.0 | May 2026     |
 
 > Contract addresses in this skill are for **cartesi-rollups v2.2.0**. If the node is running a newer contract suite, the addresses will differ — check `compose.local.yaml` image tags and update accordingly. For local devnet, always resolve addresses from `cartesi address-book`.
 
@@ -29,7 +29,7 @@ originate from on-chain events, and so that application outputs (vouchers)
 can be executed back on-chain. This skill covers: the InputBox ingress
 pattern, L1 contract architecture, access control, Foundry deployment, and
 on-chain output execution. It does not cover frontend integration (see
-`cartesi-rollups-frontend`) or node deployment (see `cartesi-deploy`).
+`cartesi-frontend`) or node deployment (see `cartesi-deploy`).
 
 ## Core mental model
 
@@ -453,7 +453,7 @@ After completing this skill, report back to the user with:
 | Deploy the Cartesi app to testnet / self-hosted node   | `cartesi-deploy`    |
 | Test L1 contract interactions locally with cartesi run | `cartesi-local-dev` |
 | Debug revert errors or unknown selectors               | `cartesi-debug`     |
-| Implement backend handler for the new input type       | `cartesi-backend`   |
+| Implement backend handler for the new input type       | `cartesi-backend-core` + `cartesi-backend-py` / `cartesi-backend-js-ts` |
 | Query emitted vouchers after epoch close               | `cartesi-jsonrpc`   |
 
 ## Resources

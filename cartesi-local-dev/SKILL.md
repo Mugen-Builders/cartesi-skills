@@ -127,7 +127,8 @@ docker --version    # Docker running
 ```
 
 The application must already be scaffolded (`cartesi-scaffold`) and have
-backend handlers implemented (`cartesi-backend`).
+backend handlers implemented (`cartesi-backend-core` plus
+`cartesi-backend-py` or `cartesi-backend-js-ts`).
 
 ---
 
@@ -627,12 +628,15 @@ $EXEC read outputs <app-name>
 
 ## Phase 7 — Forked chain workflow
 
-Fork a public testnet to test with realistic contract state:
+Fork a public testnet to test with realistic contract state. The same flags
+work in both CLI versions (v1.5 and v2.0-alpha); confirm support with
+`cartesi run --help` if a flag is rejected.
 
 ```sh
-# v1.5
+# Fork at the chain's latest block
 cartesi run --fork-url <RPC_URL>
-cartesi run --fork-url <RPC_URL>
+
+# Fork at a specific historical block (deterministic)
 cartesi run --fork-url <RPC_URL> --fork-block-number <N>
 ```
 
@@ -688,11 +692,11 @@ After completing this skill, report back to the user with:
 
 | What the user wants to do next                   | Go to skill            |
 | ------------------------------------------------ | ---------------------- |
-| Wire an L1 contract or oracle to InputBox        | `cartesi-l1-contracts` |
+| Wire an L1 contract or oracle to InputBox        | `cartesi-contracts` |
 | Deploy to testnet or self-hosted node            | `cartesi-deploy`       |
 | Query outputs programmatically via JSON-RPC      | `cartesi-jsonrpc`      |
 | Debug advance not being processed or state wrong | `cartesi-debug`        |
-| Improve backend advance/inspect handler logic    | `cartesi-backend`      |
+| Improve backend advance/inspect handler logic    | `cartesi-backend-core` + `cartesi-backend-py` / `cartesi-backend-js-ts` |
 
 ## Resources
 
@@ -727,6 +731,6 @@ After completing this skill, report back to the user with:
 
 | Next task                     | Skill to use           |
 | ----------------------------- | ---------------------- |
-| Wire L1 contracts to InputBox | `cartesi-l1-contracts` |
+| Wire L1 contracts to InputBox | `cartesi-contracts` |
 | Deploy to self-hosted node    | `cartesi-deploy`       |
 | Debug unexpected behaviour    | `cartesi-debug`        |

@@ -28,7 +28,8 @@ Set up a clean, correctly structured Cartesi Rollups v2 project ready for
 backend logic implementation. This skill covers only the scaffold phase:
 project creation, template selection, and understanding the initial file
 layout. Stop here — do not implement handlers. That is the job of the
-`cartesi-backend` skill.
+`cartesi-backend-core` skill (plus `cartesi-backend-py` or
+`cartesi-backend-js-ts` for the chosen language).
 
 ---
 
@@ -136,7 +137,9 @@ Key files to understand:
 
 - **`src/index.js`** (or equivalent): All backend logic lives here — the
   `/finish` polling loop, advance handler, and inspect handler.
-  See the `cartesi-backend` skill for implementation guidance.
+  See `cartesi-backend-core` (plus the matching language skill,
+  `cartesi-backend-py` or `cartesi-backend-js-ts`) for implementation
+  guidance.
 - **`Dockerfile`**: Defines the RISC-V Linux environment the Cartesi Machine
   will run. Add system dependencies here (e.g. `apt install`, pip packages).
   **This file also indicates the project's Cartesi version:**
@@ -197,13 +200,13 @@ After completing this skill, report back to the user with:
 
 ## Routing Guide
 
-| What the user wants to do next           | Go to skill            |
-| ---------------------------------------- | ---------------------- |
-| Write advance and inspect handlers       | `cartesi-backend`      |
-| Run the app locally and send test inputs | `cartesi-local-dev`    |
-| Wire an L1 contract to InputBox          | `cartesi-l1-contracts` |
-| Deploy to a testnet or self-hosted node  | `cartesi-deploy`       |
-| Debug a build failure                    | `cartesi-debug`        |
+| What the user wants to do next           | Go to skill                                                            |
+| ---------------------------------------- | ---------------------------------------------------------------------- |
+| Write advance and inspect handlers       | `cartesi-backend-core` + `cartesi-backend-py` / `cartesi-backend-js-ts` |
+| Run the app locally and send test inputs | `cartesi-local-dev`                                                    |
+| Wire an L1 contract to InputBox          | `cartesi-contracts`                                                    |
+| Deploy to a testnet or self-hosted node  | `cartesi-deploy`                                                       |
+| Debug a build failure                    | `cartesi-debug`                                                        |
 
 ## Resources
 
@@ -217,12 +220,12 @@ After completing this skill, report back to the user with:
 
 ## What comes next
 
-| Next task                            | Skill to use           |
-| ------------------------------------ | ---------------------- |
-| Implement advance/inspect handlers   | `cartesi-backend`      |
-| Run locally and test                 | `cartesi-local-dev`    |
-| Wire L1 contracts to InputBox        | `cartesi-l1-contracts` |
-| Deploy to a self-hosted rollups node | `cartesi-deploy`       |
+| Next task                            | Skill to use                                                            |
+| ------------------------------------ | ----------------------------------------------------------------------- |
+| Implement advance/inspect handlers   | `cartesi-backend-core` + `cartesi-backend-py` / `cartesi-backend-js-ts` |
+| Run locally and test                 | `cartesi-local-dev`                                                     |
+| Wire L1 contracts to InputBox        | `cartesi-contracts`                                                     |
+| Deploy to a self-hosted rollups node | `cartesi-deploy`                                                        |
 
 ## Agent checklist
 

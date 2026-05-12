@@ -58,20 +58,53 @@ All requests follow the JSON-RPC 2.0 specification:
 }
 ```
 
-All responses return either a `result` or an `error`:
+All responses return either a `result` or an `error`. The shape of `result`
+depends on which method was called — there is no single envelope. The three
+shapes you will see are:
+
+**1. List shape (`cartesi_list*` methods)** — a paginated array with a
+`pagination` object alongside:
 
 ```json
 {
   "jsonrpc": "2.0",
   "id": 1,
   "result": {
-    "data": [...],
+    "data": [{ "...": "..." }],
     "pagination": {
       "total_count": 42,
       "limit": 10,
       "offset": 0
     }
   }
+}
+```
+
+**2. Single-object shape (`cartesi_get*` methods that return a struct)** —
+the resource is returned directly (no `data`/`pagination` envelope):
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "name": "my-dapp",
+    "state": "ENABLED",
+    "...": "..."
+  }
+}
+```
+
+**3. Scalar shape (`cartesi_getProcessedInputCount`,
+`cartesi_getLastAcceptedEpochIndex`, `cartesi_getChainId`,
+`cartesi_getNodeVersion`)** — the scalar (hex string or plain string) is
+returned directly as `result`:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": "0x2a"
 }
 ```
 
@@ -703,10 +736,10 @@ After completing this skill, report back to the user with:
 
 | What the user wants to do next                       | Go to skill            |
 | ---------------------------------------------------- | ---------------------- |
-| Execute a voucher on-chain after epoch is accepted   | `cartesi-l1-contracts` |
+| Execute a voucher on-chain after epoch is accepted   | `cartesi-contracts` |
 | Deploy the node to testnet to start producing epochs | `cartesi-deploy`       |
 | Debug why outputs are missing or inputs are rejected | `cartesi-debug`        |
-| Implement backend logic that emits the outputs       | `cartesi-backend`      |
+| Implement backend logic that emits the outputs       | `cartesi-backend-core` + `cartesi-backend-py` / `cartesi-backend-js-ts` |
 | Test and send inputs locally before querying         | `cartesi-local-dev`    |
 
 ## Resources
@@ -735,6 +768,6 @@ After completing this skill, report back to the user with:
 
 | Next task                  | Skill to use           |
 | -------------------------- | ---------------------- |
-| Execute vouchers on-chain  | `cartesi-l1-contracts` |
+| Execute vouchers on-chain  | `cartesi-contracts` |
 | Deploy to self-hosted node | `cartesi-deploy`       |
 | Debug node or query issues | `cartesi-debug`        |

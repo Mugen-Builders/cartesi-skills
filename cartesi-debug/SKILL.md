@@ -17,9 +17,17 @@ description: >-
 
 | Skill           | Version | Cartesi Rollups target               | Compose setup       | Last updated |
 | --------------- | ------- | ------------------------------------ | ------------------- | ------------ |
-| `cartesi-debug` | `0.1.0  | v2.0-alpha (CLI v1.5 and v2.0-alpha) | Mugen-Builders v2.0 | May 2026     |
+| `cartesi-debug` | `0.1.0` | v2.0-alpha (CLI v1.5 and v2.0-alpha) | Mugen-Builders v2.0 | May 2026     |
 
 > Error messages, command names, and Dockerfile markers documented here target CLI v1.5 and v2.0-alpha. If the user is on a newer CLI version, some symptoms or fixes may have changed — always start diagnosis with `cartesi --version`.
+
+> **`cartesi-rollups-cli` execution context**: every `cartesi-rollups-cli`
+> command in this file runs **inside the advancer container** of a
+> compose-based self-hosted deployment. Prefix each command with
+> `docker compose -f compose.local.yaml exec advancer …`. With `cartesi run`,
+> `cartesi-rollups-cli` is not on the host — use `curl` against the inspect
+> endpoint and the JSON-RPC API instead (see `cartesi-local-dev` and
+> `cartesi-jsonrpc`).
 
 # Cartesi Rollups v2 — Debugging and Troubleshooting
 
@@ -68,14 +76,19 @@ Then check available commands:
 cartesi --help
 ```
 
-If the user has both versions installed:
+If the user appears to have both versions installed (for example npm-global
+plus a Homebrew-managed binary), list every `cartesi` binary on `PATH` and
+inspect each:
 
 ```sh
-cartesi --version    # v1.5
-cartesi --version   # v2.0-alpha prints e.g. 2.0.0-alpha.x
+which -a cartesi               # show every cartesi binary on PATH
+npm ls -g @cartesi/cli         # version installed by npm (if any)
+brew list --versions cartesi   # version installed by Homebrew (if any)
 ```
 
-Use the CLI that matches the project version (check Dockerfile).
+Use the CLI that matches the project version (check Dockerfile). If the
+wrong one wins on `PATH`, either reorder `PATH`, alias `cartesi` to the
+intended binary, or uninstall the unwanted version.
 
 ### Symptom: Built with wrong CLI version / image incompatible
 
@@ -212,9 +225,18 @@ Possible causes:
 
 1. **Input rejected**: the backend returned `"reject"`. Read reports to see
    the error:
+
    ```sh
-   cartesi-rollups-cli read reports <app-name>
+   # With cartesi run — use JSON-RPC (replace <port> with the printed JSON-RPC port)
+   curl -s -X POST "http://localhost:<port>/rpc" \
+     -H "Content-Type: application/json" \
+     -d '{"jsonrpc":"2.0","id":1,"method":"cartesi_listReports","params":{"application":"<app-name>"}}'
+
+   # With compose deployment — use cartesi-rollups-cli inside advancer
+   docker compose -f compose.local.yaml exec advancer \
+     cartesi-rollups-cli read reports <app-name>
    ```
+
 2. **Wrong app address**: the input was sent to the wrong application.
 3. **Backend restarted and lost ephemeral state**: state is in-memory.
    Resend from scratch or use snapshots.
@@ -548,8 +570,8 @@ After completing this skill, report back to the user with:
 | ------------------------------------------------ | ---------------------- |
 | Rebuild and redeploy after fixing build or code  | `cartesi-deploy`       |
 | Resume local testing (`cartesi run`)             | `cartesi-local-dev`    |
-| Fix L1 contract revert or InputBox interaction   | `cartesi-l1-contracts` |
-| Re-implement the advance/inspect handler         | `cartesi-backend`      |
+| Fix L1 contract revert or InputBox interaction   | `cartesi-contracts` |
+| Re-implement the advance/inspect handler         | `cartesi-backend-core` + `cartesi-backend-py` / `cartesi-backend-js-ts` |
 | Query outputs after node is healthy              | `cartesi-jsonrpc`      |
 
 ## Resources
