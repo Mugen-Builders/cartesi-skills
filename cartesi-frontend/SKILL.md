@@ -1,18 +1,26 @@
 ---
 name: cartesi-frontend
-version: 0.1.0
+version: 0.2.0
 description: >-
-  Build Cartesi Rollups v2 frontend applications with clear module boundaries
-  and predictable runtime behavior: wallet integration, app I/O, configuration,
-  and optional asset bridging. Use this whenever the user asks for React/Next.js/
-  Angular (or any web frontend) that connects wallets, sends inputs to InputBox,
-  reads machine state via Cartesi JSON-RPC, or uses @cartesi/wagmi and
-  @cartesi/viem packages. If the user provides or references a project
-  DESIGN.md, treat it as the primary visual design authority and follow Google
-  DESIGN.md format/spec conventions.
+  Build Cartesi Rollups frontend applications with wallet integration, app I/O,
+  configuration, and optional asset bridging. Covers contracts v3 application
+  health (enabled/status), claim staging epoch polling, emergency withdrawal
+  reads via JSON-RPC, and @cartesi/wagmi / @cartesi/viem. Triggers on: React,
+  Next.js, wallet, InputBox, JSON-RPC, withdrawals, FORECLOSED, CLAIM_STAGED.
 ---
 
-# Cartesi Rollups v2 frontend app
+# Cartesi Rollups frontend app
+
+## Skill version
+
+| Skill              | Version | Contract suite              | Last updated |
+| ------------------ | ------- | --------------------------- | ------------ |
+| `cartesi-frontend` | `0.2.0` | `cartesi-rollups` 3.0.0-alpha.6 | Jun 2026     |
+
+> Application health uses `enabled` + `status` on contracts v3 nodes — not the
+> old `state` field. Emergency L1 withdrawals use `cartesi_listWithdrawals`;
+> backend voucher withdrawals remain outputs. See `cartesi-jsonrpc` and
+> `cartesi-contracts`.
 
 ## Objective
 
@@ -82,6 +90,7 @@ Keep these concerns in distinct modules/files:
    - Typed config object and validation on startup.
    - No wallet or business logic in config module.
    - For local runs, include explicit local chain settings (for example `VITE_ANVIL_RPC_URL`, `VITE_L1_CHAIN_ID`).
+   - On contracts v3 nodes, expect `enabled` and `status` from `cartesi_getApplication` — do not read deprecated `state`.
 
 2. **Wallet layer**
    - Wallet connectors (in-browser injected wallet recommended by default).
@@ -92,9 +101,12 @@ Keep these concerns in distinct modules/files:
 3. **Cartesi I/O layer**
    - Send input payloads to InputBox contract.
    - Read notices, vouchers, delegated vouchers, reports, and input/epoch status via Cartesi JSON-RPC.
+   - Read **emergency withdrawal** rows via `cartesi_listWithdrawals` / `cartesi_getWithdrawal` when building operator or post-foreclosure dashboards.
+   - Poll epoch status through the v3 staging path (`CLAIM_SUBMITTED` → `CLAIM_STAGED` → `CLAIM_ACCEPTED`) before treating vouchers as executable.
    - Provide inspect call helpers as a read-only state check path (`POST /inspect/<application>`).
    - Data transformation utilities (hex <-> utf-8, formatting and pagination).
    - Support response shape compatibility across alpha versions (for example `decoded_data.type` / `decoded_data.payload` vs older `output_type` / `payload` fields).
+   - Surface application health: `enabled`, `status` (`OK`, `FAILED`, `INOPERABLE`, `FORECLOSED`), and `foreclose_block` when relevant.
 
 4. **UI layer**
    - Composes wallet + I/O modules into components/pages.
@@ -134,16 +146,28 @@ Keep these concerns in distinct modules/files:
 
 - Use Cartesi hooks/client from `@cartesi/wagmi` where practical.
 - For low-level calls, map to documented JSON-RPC methods:
-  - application listing/details
-  - epoch listing/details
+  - application listing/details (`enabled`, `status`, `withdrawal_config`, foreclosure markers)
+  - epoch listing/details (include `CLAIM_STAGED`, `CLAIM_FORECLOSED`)
   - input listing/details and processed count
-  - output listing/details
+  - output listing/details (voucher withdrawals — normal app egress)
   - report listing/details
+  - withdrawal listing/details (`cartesi_listWithdrawals`, `cartesi_getWithdrawal` — emergency L1 path)
 - Implement pagination and optional filters (`limit`, `offset`, `epoch_index`, `input_index`, etc.).
 - Handle JSON-RPC error objects explicitly.
 - Decode outputs from both:
   - `decoded_data` (`type`, `payload`) when present, and
   - legacy/raw payload fields as fallback.
+
+**Voucher readiness:** only enable execute/submit UX when epoch `status === "CLAIM_ACCEPTED"`. On Authority/Quorum, `CLAIM_SUBMITTED` or `CLAIM_STAGED` is not sufficient.
+
+**Withdrawal types — do not conflate:**
+
+| Type | Source | Frontend reads |
+| ---- | ------ | ---------------- |
+| Voucher withdrawal | Backend emits voucher output | `cartesi_listOutputs`; execute on L1 separately |
+| Emergency withdrawal | Post-foreclosure L1 `withdraw()` | `cartesi_listWithdrawals` |
+
+Emergency withdrawal UI is operator-focused; normal dApp UIs only need voucher outputs unless explicitly building foreclosure recovery tools.
 
 ### 5) Add inspect call path for state checks
 
@@ -220,6 +244,9 @@ Before finishing, verify:
 - Input submission goes through InputBox contract interactions.
 - Output/report reads come from Cartesi JSON-RPC API paths or corresponding wrappers.
 - Inspect calls are implemented as a separate read path (`/inspect/...`) and not conflated with advance transactions.
+- Application health uses `enabled` + `status`, not deprecated `state`.
+- Epoch/voucher UI waits for `CLAIM_ACCEPTED` (via staging on Authority/Quorum).
+- Emergency withdrawals (if implemented) use `cartesi_listWithdrawals`, not output queries.
 - Bridge logic is absent unless requested; if present, it is isolated.
 - UI styling is vanilla CSS unless user provided design requirements.
 - Local development path is complete when user runs Cartesi locally:
