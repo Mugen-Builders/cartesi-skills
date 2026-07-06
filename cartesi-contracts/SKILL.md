@@ -1,6 +1,6 @@
 ---
 name: cartesi-contracts
-version: 0.2.0
+version: 0.3.0
 description: >-
   Wire L1 smart contracts into a Cartesi Rollups application via the InputBox
   contract. Covers contracts v3 lifecycle (claim staging, withdrawal config,
@@ -18,7 +18,7 @@ description: >-
 
 | Skill               | Version | Cartesi Rollups target | Contract suite              | Last updated |
 | ------------------- | ------- | ---------------------- | --------------------------- | ------------ |
-| `cartesi-contracts` | `0.2.0` | v2.0-alpha / contracts v3 | `cartesi-rollups` 3.0.0-alpha.6 | Jun 2026     |
+| `cartesi-contracts` | `0.3.0` | v2.0-alpha / contracts v3 | `cartesi-rollups` 3.0.0-alpha.6 | Jul 2026     |
 
 > **Contracts v3** is the current target suite (`rollups-contracts 3.0.0-alpha.6`, `dave 3.0.0-alpha.3`). Addresses differ from v2.2.0 — always resolve from Cannon or `compose.local.yaml` image tags. For local devnet (`cartesi run`), use `cartesi address-book`. Mixing old contracts, old factory addresses, or a v2-alpha DB with a v3 node binary is the highest-risk deployment mistake.
 
@@ -147,19 +147,50 @@ This prints every deployed address for the running Anvil network — InputBox, a
 
 ### For testnets and production — contracts v3 (3.0.0-alpha.6)
 
-Resolve addresses from the Cannon registry for the **exact** contract version
-your node targets:
+**Primary source:** [`cartesi-rollups-3.0.0-alpha.6.json`](cartesi-rollups-3.0.0-alpha.6.json)
+in this skill directory. Infrastructure addresses are **identical** on these
+chains (deterministic Cannon deployment):
+
+| Chain ID | Network |
+| -------- | ------- |
+| `1` | Ethereum Mainnet |
+| `10` | Optimism Mainnet |
+| `42161` | Arbitrum One |
+| `8453` | Base Mainnet |
+| `11155111` | Ethereum Sepolia |
+| `11155420` | Optimism Sepolia |
+| `421614` | Arbitrum Sepolia |
+| `84532` | Base Sepolia |
+
+Set `BLOCKCHAIN_ID` and RPC for your target chain; override compose factory
+addresses from the manifest `contracts` object (Mugen-Builders defaults are
+**not** this suite).
+
+**Secondary verification:** Cannon registry (client-side rendered):
 
 ```
 https://usecannon.com/packages/cartesi-rollups/3.0.0-alpha.6/<chain-id>-main/deployment/contracts
 ```
 
-(Open in a browser — the page is client-side rendered.)
-
 Confirm the version by checking the `cartesi-rollups-runtime` image tag in
 `compose.local.yaml`. The node, contract suite, and DB schema must match.
 
-**v3 factory suite** — all must point at the same deployment:
+**v3 infrastructure addresses** (all listed chains):
+
+| Contract | Address |
+| -------- | ------- |
+| `InputBox` | `0x346B3df038FE9f8380071eC6514D5a83aD143939` |
+| `AuthorityFactory` | `0x3C1FE01c542a88A523FF6847eD1E26176c8C4ED0` |
+| `ApplicationFactory` | `0xC549F89cF1ca43eDDECC64Ac2208F4b283B1c483` |
+| `SelfHostedApplicationFactory` | `0x6145C5996a71a379E030aEb0440df79D60833418` |
+| `QuorumFactory` | `0x1f94009389F408B8D0ADfFcF8BBDCe5552BaCa5F` |
+| `EtherPortal` | `0x8b53327575ac999bdfa8003f4b5134DFF9027516` |
+| `ERC20Portal` | `0x22E57511C30CcE6CDaa742E13CE3b774fDC663b1` |
+| `ERC721Portal` | `0xcA3a0a47915C12F020CF70B938aCC8e744414cb8` |
+| `ERC1155SinglePortal` | `0x13663E193673756a02e84b724B8a3422A9a7aab4` |
+| `ERC1155BatchPortal` | `0x3649c5E2De91C69a7Bb80D864f0039da5E511096` |
+| `SafeERC20Transfer` | `0x15E45E779ED795E5ac4643f6C428B161ccDE7A61` |
+| `UsdWithdrawalOutputBuilderFactory` | `0xdB4EC04a2792A04cF7421f99A70F624681dd8e50` |
 
 | Contract | Role |
 | -------- | ---- |
@@ -173,7 +204,7 @@ Confirm the version by checking the `cartesi-rollups-runtime` image tag in
 | `QuorumFactory` | Deploy Quorum (multi-validator) consensus |
 | `ApplicationFactory` | Deploy Cartesi Application contracts |
 | `SelfHostedApplicationFactory` | Deploy application + authority in one tx |
-| `DaveAppFactory` | Deploy PRT (Dave tournament) applications |
+| `DaveAppFactory` | Deploy PRT (Dave tournament) applications — resolve from Cannon if needed |
 | `SafeERC20Transfer` | Helper for ERC-20 transfers via delegated call vouchers |
 
 ### Legacy — cartesi-rollups v2.2.0
