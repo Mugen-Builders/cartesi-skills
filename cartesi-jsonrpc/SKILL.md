@@ -1,27 +1,32 @@
 ---
 name: cartesi-jsonrpc
-version: 0.1.0
+version: 0.2.0
 description: >-
-  Query a running Cartesi Rollups v2 node via its JSON-RPC 2.0 API (port 10011).
+  Query a running Cartesi Rollups node via its JSON-RPC 2.0 API (port 10011).
   Use this whenever you need to list or fetch applications, epochs, inputs,
-  outputs (notices, vouchers, DELEGATECALL vouchers), reports, or node metadata
-  programmatically. Covers all cartesi_ prefixed methods, type definitions,
-  pagination and filtering patterns, error handling, and complete TypeScript
-  interface reference. Triggers on: "JSON-RPC", "cartesi_listInputs",
-  "cartesi_getOutput", "cartesi_listReports", "query node", "JSON-RPC API",
-  "port 10011", "query outputs", "fetch notices", "fetch vouchers", "list epochs",
-  "get processed inputs", "node version", "chain id", "jsonrpc-api service".
+  outputs (notices, vouchers, DELEGATECALL vouchers), reports, withdrawals,
+  or node metadata programmatically. Covers all cartesi_ prefixed methods,
+  contracts v3 application fields (enabled, status, withdrawal_config,
+  foreclosure markers), epoch staging states, type definitions, pagination,
+  and TypeScript interfaces. Triggers on: "JSON-RPC", "cartesi_listInputs",
+  "cartesi_getOutput", "cartesi_listWithdrawals", "cartesi_listReports",
+  "query node", "JSON-RPC API", "port 10011", "query outputs", "list epochs",
+  "CLAIM_STAGED", "foreclose_block", "withdrawal", "enabled", "status".
 ---
 
 ## Skill Version
 
 | Skill             | Version | Cartesi Rollups target | Node runtime                              | Last updated |
 | ----------------- | ------- | ---------------------- | ----------------------------------------- | ------------ |
-| `cartesi-jsonrpc` | `0.1.0` | v2.0-alpha             | `cartesi-rollups-runtime:0.12.0-alpha.39` | May 2026     |
+| `cartesi-jsonrpc` | `0.2.0` | contracts v3           | Confirm tag in `compose.local.yaml`       | Jun 2026     |
 
-> All `cartesi_` method names, parameter types, and response shapes documented here target the runtime above. If the node has been updated to a newer runtime, verify that method names and response fields still match — especially `raw_data` encoding and pagination parameter names.
+> Method names and response shapes target a **contracts v3** node. The application
+> model uses `enabled` + `status` (not the old single `state` field). Epochs add
+> `CLAIM_STAGED` and `CLAIM_FORECLOSED`. If the node runtime differs, verify
+> fields against `cartesi_getNodeVersion` and the rollups-node JSON-RPC source.
+> Lifecycle semantics: `cartesi-contracts`.
 
-# Cartesi Rollups v2 — JSON-RPC API
+# Cartesi Rollups — JSON-RPC API
 
 ## Goal
 
@@ -89,7 +94,8 @@ the resource is returned directly (no `data`/`pagination` envelope):
   "id": 1,
   "result": {
     "name": "my-dapp",
-    "state": "ENABLED",
+    "enabled": true,
+    "status": "OK",
     "...": "..."
   }
 }
@@ -202,6 +208,21 @@ Or by address:
 { "application": "0xba3347e79665924033beeb7362629ca7992897d9" }
 ```
 
+**Contracts v3 application fields** (via `cartesi_getApplication`):
+
+| Field | Type | Notes |
+| ----- | ---- | ----- |
+| `enabled` | boolean | Operator intent |
+| `status` | string | `OK`, `FAILED`, `INOPERABLE`, `FORECLOSED` |
+| `claim_staging_period` | hex string | Blocks before `acceptClaim` is valid |
+| `withdrawal_config` | object | Guardian and accounts-drive layout set at deploy |
+| `foreclose_block` | hex string | `0x0` if not foreclosed |
+| `accounts_drive_proved_block` | hex string | Set after drive root proved on L1 |
+| `reason` | string | Human-readable detail when `status` is not `OK` |
+
+`FORECLOSED` is a normal emergency path — not corruption. Do not treat it
+like `INOPERABLE`. See `cartesi-contracts` for lifecycle semantics.
+
 ---
 
 ## Epochs
@@ -225,7 +246,12 @@ List epochs for an application. Optionally filter by status.
 ```
 
 **`status` filter values**: `OPEN`, `CLOSED`, `INPUTS_PROCESSED`,
-`CLAIM_COMPUTED`, `CLAIM_SUBMITTED`, `CLAIM_ACCEPTED`, `CLAIM_REJECTED`
+`CLAIM_COMPUTED`, `CLAIM_SUBMITTED`, `CLAIM_STAGED`, `CLAIM_ACCEPTED`,
+`CLAIM_REJECTED`, `CLAIM_FORECLOSED`
+
+**Authority / Quorum path:** `CLAIM_SUBMITTED` → `CLAIM_STAGED` →
+(wait staging period) → `CLAIM_ACCEPTED`. **PRT** skips `CLAIM_STAGED`.
+Foreclosure before acceptance moves the epoch to `CLAIM_FORECLOSED`.
 
 ### `cartesi_getEpoch`
 
@@ -391,6 +417,54 @@ on-chain proof — use them for debug data, error messages, and read results.
 
 ---
 
+## Withdrawals (contracts v3)
+
+Withdrawal rows are recorded by the EVM Reader after on-chain
+`withdraw(account, accountProof)` calls in the post-foreclosure lifecycle.
+They appear only after the accounts-drive merkle root has been proved on L1.
+
+> **Not voucher withdrawals:** these RPC methods track **emergency L1
+> withdrawals** after foreclosure. Backend-emitted voucher withdrawals are
+> outputs — use `cartesi_listOutputs` and execute via `cartesi-rollups-cli
+> execute`. See `cartesi-contracts`.
+
+### `cartesi_listWithdrawals`
+
+List withdrawal events for an application. Optionally filter by account index.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "cartesi_listWithdrawals",
+  "params": {
+    "application": "my-dapp",
+    "limit": 10,
+    "offset": 0
+  }
+}
+```
+
+### `cartesi_getWithdrawal`
+
+Fetch a specific withdrawal by account index (hex encoded).
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "cartesi_getWithdrawal",
+  "params": {
+    "application": "my-dapp",
+    "account_index": "0x0"
+  }
+}
+```
+
+Verify operator CLI `read withdrawals` and JSON-RPC return consistent rows.
+
+---
+
 ## Node information
 
 ### `cartesi_getChainId`
@@ -430,10 +504,16 @@ All hex values use these patterns:
 
 ### Enums
 
-**`ApplicationState`**: `ENABLED` | `DISABLED` | `INOPERABLE`
+**`ApplicationStatus`**: `OK` | `FAILED` | `INOPERABLE` | `FORECLOSED`
+
+Use with `enabled` (boolean) — the old single `ApplicationState` field
+(`ENABLED` / `DISABLED` / `INOPERABLE`) is replaced on contracts v3 nodes.
 
 **`EpochStatus`**: `OPEN` → `CLOSED` → `INPUTS_PROCESSED` → `CLAIM_COMPUTED`
-→ `CLAIM_SUBMITTED` → `CLAIM_ACCEPTED` | `CLAIM_REJECTED`
+→ `CLAIM_SUBMITTED` → `CLAIM_STAGED` → `CLAIM_ACCEPTED`
+| `CLAIM_REJECTED` | `CLAIM_FORECLOSED`
+
+PRT consensus skips `CLAIM_STAGED`.
 
 **`InputCompletionStatus`**: `NONE` | `ACCEPTED` | `REJECTED` | `EXCEPTION`
 | `MACHINE_HALTED` | `OUTPUTS_LIMIT_EXCEEDED` | `CYCLE_LIMIT_EXCEEDED`
@@ -444,6 +524,11 @@ All hex values use these patterns:
 ### TypeScript interfaces
 
 ```typescript
+interface WithdrawalConfig {
+  guardian: string; // EthereumAddress
+  // Additional layout fields — match deploy-time config JSON
+}
+
 interface Application {
   name: string; // ApplicationName
   iapplication_address: string; // EthereumAddress
@@ -451,8 +536,13 @@ interface Application {
   iinputbox_address: string; // EthereumAddress
   template_hash: string; // Hash
   epoch_length: string; // UnsignedInteger
+  claim_staging_period: string; // UnsignedInteger — contracts v3
   data_availability: string; // ByteArray
-  state: "ENABLED" | "DISABLED" | "INOPERABLE";
+  enabled: boolean;
+  status: "OK" | "FAILED" | "INOPERABLE" | "FORECLOSED";
+  withdrawal_config: WithdrawalConfig | null;
+  foreclose_block: string; // UnsignedInteger — 0x0 if not foreclosed
+  accounts_drive_proved_block: string; // UnsignedInteger
   reason: string;
   iinputbox_block: string; // UnsignedInteger
   last_input_check_block: string; // UnsignedInteger
@@ -487,6 +577,7 @@ interface Epoch {
   last_block: string; // UnsignedInteger
   claim_hash: string | null; // Hash
   claim_transaction_hash: string | null; // Hash
+  staged_at_block: string | null; // UnsignedInteger — contracts v3 Authority/Quorum
   status: EpochStatus;
   virtual_index: string; // UnsignedInteger
   created_at: string;
@@ -558,6 +649,15 @@ interface Report {
   updated_at: string;
 }
 
+interface Withdrawal {
+  account_index: string; // UnsignedInteger
+  account: string; // EthereumAddress
+  block_number: string; // UnsignedInteger
+  transaction_hash: string; // Hash
+  created_at: string;
+  updated_at: string;
+}
+
 interface Pagination {
   total_count: number;
   limit: number;
@@ -590,7 +690,7 @@ async function waitForInputProcessed(
       }),
     });
     const data = await res.json();
-    const count = parseInt(data.result.data, 16);
+    const count = parseInt(data.result, 16);
     if (count >= targetCount) return;
     await new Promise((r) => setTimeout(r, pollIntervalMs));
   }
@@ -649,7 +749,57 @@ async function isEpochAccepted(
     }),
   });
   const { result } = await res.json();
-  return result.data.status === "CLAIM_ACCEPTED";
+  return result.status === "CLAIM_ACCEPTED";
+}
+```
+
+### Poll until epoch reaches CLAIM_STAGED (Authority / Quorum)
+
+```typescript
+async function isEpochStaged(
+  rpcUrl: string,
+  app: string,
+  epochIndex: number,
+): Promise<boolean> {
+  const res = await fetch(rpcUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "cartesi_getEpoch",
+      params: {
+        application: app,
+        epoch_index: `0x${epochIndex.toString(16)}`,
+      },
+    }),
+  });
+  const { result } = await res.json();
+  const staged = result.status === "CLAIM_STAGED";
+  const accepted = result.status === "CLAIM_ACCEPTED";
+  return staged || accepted;
+}
+```
+
+### Check application is healthy for processing
+
+```typescript
+async function isAppOperational(
+  rpcUrl: string,
+  app: string,
+): Promise<boolean> {
+  const res = await fetch(rpcUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "cartesi_getApplication",
+      params: { application: app },
+    }),
+  });
+  const { result } = await res.json();
+  return result.enabled === true && result.status === "OK";
 }
 ```
 
@@ -725,9 +875,10 @@ After completing this skill, report back to the user with:
 
 - JSON-RPC endpoint URL confirmed reachable (port 10011)
 - Chain ID and application name/address confirmed via `cartesi_getChainId` and `cartesi_getApplication`
-- Application state confirmed `ENABLED`
+- Application health confirmed: `enabled == true` and `status == "OK"` (or `FORECLOSED` if monitoring post-foreclosure observation)
 - Total processed input count (`cartesi_getProcessedInputCount`)
 - Summary of outputs found: number of notices, vouchers, delegated call vouchers, and reports
+- Emergency withdrawal rows (`cartesi_listWithdrawals`) if app is foreclosed
 - Any vouchers ready for on-chain execution (epoch `CLAIM_ACCEPTED`) — include output index
 - Code snippet(s) generated for the user's specific query need (poll, paginate, etc.)
 - Any errors encountered (RPC error codes, empty results) and their resolution
@@ -739,6 +890,7 @@ After completing this skill, report back to the user with:
 | Execute a voucher on-chain after epoch is accepted   | `cartesi-contracts` |
 | Deploy the node to testnet to start producing epochs | `cartesi-deploy`       |
 | Debug why outputs are missing or inputs are rejected | `cartesi-debug`        |
+| Foreclosure / emergency withdrawal operator flows    | `cartesi-contracts`, `cartesi-deploy` |
 | Implement backend logic that emits the outputs       | `cartesi-backend-core` + `cartesi-backend-py` / `cartesi-backend-js-ts` |
 | Test and send inputs locally before querying         | `cartesi-local-dev`    |
 
@@ -756,13 +908,14 @@ After completing this skill, report back to the user with:
 
 - [ ] Confirmed JSON-RPC endpoint is reachable: `curl http://localhost:10011/rpc`
 - [ ] Verified node is on correct chain: `cartesi_getChainId`
-- [ ] Application is ENABLED: `cartesi_getApplication` → `state == "ENABLED"`
+- [ ] Application is operational: `cartesi_getApplication` → `enabled == true` and `status == "OK"`
 - [ ] Used `cartesi_getProcessedInputCount` to confirm inputs are processed before querying outputs
 - [ ] Used pagination for list queries — never assumed all results fit in one page
 - [ ] Hex-encoded all index parameters (e.g. `"0x0"` not `0`)
 - [ ] Decoded `raw_data` from hex before interpreting report content
 - [ ] Checked `status` on Input objects — only ACCEPTED inputs have valid outputs
-- [ ] For vouchers: confirmed epoch `status == "CLAIM_ACCEPTED"` before execution
+- [ ] For vouchers: confirmed epoch `status == "CLAIM_ACCEPTED"` (via `CLAIM_STAGED` on Authority/Quorum)
+- [ ] For emergency withdrawals: used `cartesi_listWithdrawals` / `cartesi_getWithdrawal`, not output queries
 
 ## What comes next
 

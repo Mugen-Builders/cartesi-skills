@@ -39,7 +39,11 @@ This specification governs how backend applications:
 
 - Deployment and infrastructure;
 - Frontend/UI behavior;
-- Language-specific implementation details.
+- Language-specific implementation details;
+- **Emergency accounts-drive withdrawal** (guardian `foreclose`, machine-tool proofs,
+  L1 `proveAccountsDriveMerkleRoot` / `withdraw`) — operator/infrastructure flows;
+  see `cartesi-contracts` and `cartesi-deploy`. Backend voucher withdrawals
+  (emitting a voucher in `advance_state`) remain in scope above.
 
 ---
 
@@ -250,6 +254,18 @@ The `/finish` loop defines execution truth.
   - current state
 - MUST NOT depend on:
   - external conditions
+
+### Emergency withdrawal (contracts v3) — not a backend voucher
+
+Post-foreclosure **emergency withdrawal** is an L1 recovery path: guardian
+`foreclose()`, then permissionless `proveAccountsDriveMerkleRoot` and
+`withdraw(account, accountProof)`. It does **not** go through the backend
+handler or voucher emission. The machine state must be replayable for
+machine-tool proofs, but the backend does not call `withdraw` directly.
+
+Do not confuse this with **voucher withdrawals** — the normal pattern where
+`advance_state` emits a voucher output executed via `cartesi-rollups-cli
+execute` after `CLAIM_ACCEPTED`.
 
 ---
 

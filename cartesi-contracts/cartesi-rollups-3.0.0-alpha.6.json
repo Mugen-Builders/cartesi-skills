@@ -1,0 +1,30 @@
+{
+  "suite": "cartesi-rollups",
+  "version": "3.0.0-alpha.6",
+  "source": "Cannon registry — deterministic CREATE2 deployment",
+  "chains": {
+    "1": "Ethereum Mainnet",
+    "10": "Optimism Mainnet",
+    "42161": "Arbitrum One",
+    "8453": "Base Mainnet",
+    "11155111": "Ethereum Sepolia",
+    "11155420": "Optimism Sepolia",
+    "421614": "Arbitrum Sepolia",
+    "84532": "Base Sepolia"
+  },
+  "note": "Infrastructure contract addresses are identical on all listed chains. Per-chain configuration is BLOCKCHAIN_ID + RPC only. Session contracts (test tokens, output builders, deployed apps) are not included.",
+  "contracts": {
+    "InputBox": "0x346B3df038FE9f8380071eC6514D5a83aD143939",
+    "AuthorityFactory": "0x3C1FE01c542a88A523FF6847eD1E26176c8C4ED0",
+    "ApplicationFactory": "0xC549F89cF1ca43eDDECC64Ac2208F4b283B1c483",
+    "SelfHostedApplicationFactory": "0x6145C5996a71a379E030aEb0440df79D60833418",
+    "QuorumFactory": "0x1f94009389F408B8D0ADfFcF8BBDCe5552BaCa5F",
+    "EtherPortal": "0x8b53327575ac999bdfa8003f4b5134DFF9027516",
+    "ERC20Portal": "0x22E57511C30CcE6CDaa742E13CE3b774fDC663b1",
+    "ERC721Portal": "0xcA3a0a47915C12F020CF70B938aCC8e744414cb8",
+    "ERC1155SinglePortal": "0x13663E193673756a02e84b724B8a3422A9a7aab4",
+    "ERC1155BatchPortal": "0x3649c5E2De91C69a7Bb80D864f0039da5E511096",
+    "SafeERC20Transfer": "0x15E45E779ED795E5ac4643f6C428B161ccDE7A61",
+    "UsdWithdrawalOutputBuilderFactory": "0xdB4EC04a2792A04cF7421f99A70F624681dd8e50"
+  }
+}

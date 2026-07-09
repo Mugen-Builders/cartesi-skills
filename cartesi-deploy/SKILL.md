@@ -1,28 +1,57 @@
 ---
 name: cartesi-deploy
-version: 0.1.0
+version: 0.3.0
 description: >-
-  Deploy a Cartesi Rollups v2 application to a self-hosted rollups node for
-  testnet or production-style deployment using Docker Compose. Covers CLI
-  version detection, project version detection, building the machine image,
-  downloading and configuring the Mugen-Builders compose setup, setting up
-  the .env file, starting the node services, and registering the application.
-  Also covers application lifecycle management (list, status, remove, execution
-  parameters) and the node components reference. Triggers on: "deploy",
-  "self-hosted", "testnet", "rollups node", "docker compose", "compose.local",
-  "register application", "node setup", "Sepolia", "mainnet deployment",
-  "production node", "Mugen-Builders".
+  Deploy a Cartesi Rollups application to a self-hosted rollups node for
+  testnet or production-style deployment using Docker Compose. Covers contracts
+  v3 deploy flags (claim-staging-period, withdrawal-config), quorum deploy,
+  operator CLI (foreclose, prove-drive-root, withdraw), application lifecycle
+  (enabled/status), and node ops. Triggers on: "deploy", "self-hosted",
+  "testnet", "rollups node", "docker compose", "compose.local", "register
+  application", "withdrawal config", "claim staging", "foreclose", "quorum
+  deploy", "Sepolia", "Mugen-Builders".
 ---
 
 ## Skill Version
 
-| Skill            | Version | Cartesi Rollups target | Contract suite         | Compose setup       | Last updated |
-| ---------------- | ------- | ---------------------- | ---------------------- | ------------------- | ------------ |
-| `cartesi-deploy` | `0.1.0` | v2.0-alpha             | cartesi-rollups v2.2.0 | Mugen-Builders v2.0 | May 2026     |
+| Skill            | Version | Cartesi Rollups target | Contract suite              | Node / runtime pin                          | Compose setup       | Last updated |
+| ---------------- | ------- | ---------------------- | --------------------------- | ------------------------------------------- | ------------------- | ------------ |
+| `cartesi-deploy` | `0.3.0` | contracts v3           | `cartesi-rollups` 3.0.0-alpha.6 | `rollups-node` **v2.0.0-alpha.12** → `cartesi/rollups-runtime:0.12.0-alpha.41` | Mugen-Builders v2.0 | Jul 2026     |
 
-> This skill targets the Mugen-Builders `compose.local.yaml` setup and `cartesi-rollups-runtime:0.12.0-alpha.39`. If the compose file or runtime image has been updated, verify that service names, ports, and CLI commands still match. Contract addresses are for v2.2.0 — confirm against `compose.local.yaml` image tags before deploying.
+> Confirm the `cartesi-rollups-runtime` image tag in `compose.local.yaml` matches
+> both the **node binary** under test and the **contract suite** under test.
+> Contract addresses and lifecycle semantics: **`cartesi-contracts`**. Do not
+> reuse a v2-alpha database against a v3 node without an explicit migration plan.
+> When bumping node versions (e.g. alpha.11 → alpha.12), wipe the DB volume.
 
-# Cartesi Rollups v2 — Self-Hosted Node Deployment
+### Version mapping (node alpha.12)
+
+Cartesi uses different version schemes across artifacts. For **node alpha.12**:
+
+| Artifact | Version |
+| -------- | ------- |
+| `rollups-node` release tag | `v2.0.0-alpha.12` |
+| Docker runtime / database image | `0.12.0-alpha.40` or newer (use `0.12.0-alpha.41`) |
+| `cartesi-rollups-cli` inside runtime | `2.0.0-alpha.12` |
+| Cartesi CLI / SDK (host build) | `@cartesi/sdk@0.12.0-alpha.40` or newer |
+| Contracts v3 suite | `cartesi-rollups` **3.0.0-alpha.6** (unchanged) |
+
+Verify after starting the node:
+
+```sh
+docker compose -f compose.local.yaml exec advancer cartesi-rollups-node --version
+# expect: cartesi-rollups-node version 2.0.0-alpha.12
+
+docker compose -f compose.local.yaml exec advancer cartesi-rollups-cli --version
+# expect: cartesi-rollups-cli version 2.0.0-alpha.12
+```
+
+> **Mugen-Builders caveat**: The upstream `compose.local.yaml` currently ships
+> `0.12.0-alpha.39` images, which bundle **node alpha.11**. Always bump runtime
+> and database images to `0.12.0-alpha.41` (or at least `0.12.0-alpha.40`) before
+> starting the node when targeting alpha.12.
+
+# Cartesi Rollups — Self-Hosted Node Deployment
 
 ## Goal
 
@@ -61,6 +90,10 @@ cartesi --version
 | --------------- | ----------- | ---------------------------------------------- |
 | `1.5.x`         | v1.5        | Has `cartesi deploy` command (deprecated path) |
 | `2.0.0-alpha`   | v2.0-alpha  | No `cartesi deploy`; use compose-based deploy  |
+
+For node alpha.12 deployments, prefer host CLI `@cartesi/sdk@0.12.0-alpha.40` or
+newer so `cartesi build` matches the runtime emulator and guest tools bundled in
+`cartesi/rollups-runtime:0.12.0-alpha.41`.
 
 ### Detect project version from Dockerfile
 
@@ -146,16 +179,17 @@ curl -L \
 ```
 
 This compose file defines 6 services that together form the Cartesi Rollups
-Node:
+Node. **Do not use the downloaded file as-is** — patch it for node alpha.12
+before starting (see below).
 
-| Service       | Image                                      | Port(s)          | Role                            |
-| ------------- | ------------------------------------------ | ---------------- | ------------------------------- |
-| `database`    | `cartesi/rollups-database:0.12.0-alpha.39` | —                | Postgres — shared state bus     |
-| `evm-reader`  | `cartesi/rollups-runtime:0.12.0-alpha.39`  | `10001`          | Reads InputAdded events from L1 |
-| `advancer`    | `cartesi/rollups-runtime:0.12.0-alpha.39`  | `10002`, `10012` | Runs Cartesi Machine; inspect   |
-| `validator`   | `cartesi/rollups-runtime:0.12.0-alpha.39`  | `10003`          | Computes epoch claims + proofs  |
-| `claimer`     | `cartesi/rollups-runtime:0.12.0-alpha.39`  | `10004`          | Submits claims to blockchain    |
-| `jsonrpc-api` | `cartesi/rollups-runtime:0.12.0-alpha.39`  | `10005`, `10011` | Query API                       |
+| Service       | Typical role                            |
+| ------------- | --------------------------------------- |
+| `database`    | Postgres — shared state bus             |
+| `evm-reader`  | Reads L1 events (inputs, foreclosure, withdrawals) |
+| `advancer`    | Runs Cartesi Machine; inspect           |
+| `validator`   | Computes epoch claims + proofs          |
+| `claimer`     | Submit, stage, accept claims            |
+| `jsonrpc-api` | Query API                               |
 
 The advancer mounts `.cartesi/image/` from the project root as the
 application snapshot:
@@ -164,6 +198,46 @@ application snapshot:
 volumes:
   - .cartesi/image:/var/lib/cartesi-rollups-node/snapshot/
 ```
+
+### Patch compose for node alpha.12
+
+After downloading, apply these changes to `compose.local.yaml`:
+
+**1. Bump runtime and database images** (upstream ships alpha.39 = node alpha.11):
+
+```yaml
+# database service
+image: cartesi/rollups-database:0.12.0-alpha.41
+
+# all other services (evm-reader, advancer, validator, claimer, jsonrpc-api)
+image: cartesi/rollups-runtime:0.12.0-alpha.41
+```
+
+**2. Remove WebSocket endpoint** — `CARTESI_BLOCKCHAIN_WS_ENDPOINT` is **not
+supported** by rollups-node alpha.12. Delete the line from the shared `x-env`
+block:
+
+```yaml
+# REMOVE this line from x-env:
+# CARTESI_BLOCKCHAIN_WS_ENDPOINT: ${BLOCKCHAIN_WS_ENDPOINT}
+```
+
+**3. Set default block to `latest`** (required for testnet deployments that
+track the chain tip):
+
+```yaml
+# In x-env:
+CARTESI_BLOCKCHAIN_DEFAULT_BLOCK: "latest"
+
+# evm-reader command:
+command: cartesi-rollups-evm-reader --default-block latest
+```
+
+**4. Override v3 contract factory addresses** in `x-env` from
+[`cartesi-contracts/cartesi-rollups-3.0.0-alpha.6.json`](../cartesi-contracts/cartesi-rollups-3.0.0-alpha.6.json).
+The downloaded Mugen compose defaults are the **wrong** suite for v3 α.6 (e.g.
+`InputBox` `0x1b51e…` vs `0x346B3d…`). Same addresses apply on mainnet and
+testnet chains listed in that manifest — only `BLOCKCHAIN_ID` and RPC change.
 
 ---
 
@@ -178,53 +252,65 @@ AUTH_KIND=private_key
 CARTESI_AUTH_PRIVATE_KEY=<your-funded-private-key-hex>
 BLOCKCHAIN_ID=<chain-id>
 BLOCKCHAIN_HTTP_ENDPOINT=<https-rpc-url>
-BLOCKCHAIN_WS_ENDPOINT=<wss-rpc-url>
-CARTESI_BLOCKCHAIN_DEFAULT_BLOCK=<latest-or-finalized>
+CARTESI_BLOCKCHAIN_DEFAULT_BLOCK=latest
 ```
+
+> **alpha.12 change**: Do **not** set `BLOCKCHAIN_WS_ENDPOINT` or
+> `CARTESI_BLOCKCHAIN_WS_ENDPOINT`. WebSocket RPC was removed in rollups-node
+> alpha.12; the EVM reader uses HTTP polling only.
+
+For testnet Authority + withdrawal testing (e.g. `erc20-withdrawal-app`), use
+`CARTESI_BLOCKCHAIN_DEFAULT_BLOCK=latest` so the node tracks the chain tip.
+Use `finalized` only when you explicitly need reorg-safe block anchoring.
 
 ### Values by target network
 
 | Network          | `BLOCKCHAIN_ID` | Example RPC (use your own key)                |
 | ---------------- | --------------- | --------------------------------------------- |
-| Sepolia          | `11155111`      | `https://sepolia.infura.io/v3/<KEY>`          |
+| Ethereum Sepolia | `11155111`      | `https://sepolia.infura.io/v3/<KEY>`          |
+| Optimism Sepolia | `11155420`      | `https://opt-sepolia.g.alchemy.com/v2/<KEY>`  |
 | Arbitrum Sepolia | `421614`        | `https://arbitrum-sepolia.infura.io/v3/<KEY>` |
+| Base Sepolia     | `84532`         | `https://sepolia.base.org`                    |
 | Local Anvil      | `31337`         | `http://host.docker.internal:8545`            |
+
+Mainnet chains using the same v3 α.6 manifest: `1`, `10`, `42161`, `8453`.
 
 > **Security**: Never commit `.env` to version control. Add it to `.gitignore`.
 > For the private key, use a funded wallet with only the minimum ETH needed
 > for gas. For production, prefer `AUTH_KIND=aws` with AWS KMS.
 
-### Contract addresses — cartesi-rollups v2.2.0
+### Contract addresses — contracts v3
 
-The contracts below are the canonical **v2.2.0** deployment. All contracts in this version work together as a suite — `SelfHostedApplicationFactory` depends on both `AuthorityFactory` and `ApplicationFactory`, and all portals depend on `InputBox`. Use the addresses for the version your node is running.
+Use **[`cartesi-contracts/cartesi-rollups-3.0.0-alpha.6.json`](../cartesi-contracts/cartesi-rollups-3.0.0-alpha.6.json)**
+as the primary manifest. Infrastructure addresses are identical on Ethereum /
+Optimism / Arbitrum / Base mainnet and Sepolia (`1`, `10`, `42161`, `8453`,
+`11155111`, `11155420`, `421614`, `84532`). See **`cartesi-contracts`** for the
+full table and Cannon as secondary verification.
 
-> **Version note**: Future releases will use different addresses. Always confirm the version by checking the `cartesi-rollups-runtime` image tag in `compose.local.yaml` and use the matching address set. For newer versions, the Cannon registry (`https://usecannon.com/packages/cartesi-rollups/<version>/84532-main/deployment/contracts`) has the canonical list — open in a browser as the page is client-side rendered.
->
-> **Local devnet**: These addresses do NOT apply to `cartesi run`. Use `cartesi address-book` for local Anvil.
-
-| Contract                       | Address                                      |
-| ------------------------------ | -------------------------------------------- |
-| `InputBox`                     | `0x1b51e2992A2755Ba4D6F7094032DF91991a0Cfac` |
-| `EtherPortal`                  | `0xA632c5c05812c6a6149B7af5C56117d1D2603828` |
-| `ERC20Portal`                  | `0xACA6586A0Cf05bD831f2501E7B4aea550dA6562D` |
-| `ERC721Portal`                 | `0x9E8851dadb2b77103928518846c4678d48b5e371` |
-| `ERC1155SinglePortal`          | `0x18558398Dd1a8cE20956287a4Da7B76aE7A96662` |
-| `ERC1155BatchPortal`           | `0xe246Abb974B307490d9C6932F48EbE79de72338A` |
-| `AuthorityFactory`             | `0x5E96408CFE423b01dADeD3bc867E6013135990cc` |
-| `QuorumFactory`                | `0x1C91Ba8aa5648cdAC77E97eaC781447c646EF239` |
-| `ApplicationFactory`           | `0x26E758238CB6eC5aB70ce0dd52aF2d7b82e1972E` |
-| `SelfHostedApplicationFactory` | `0x010D3CbB4223F5bCc7b7B03cEE59f3aAea8eDb8A` |
-| `SafeERC20Transfer`            | `0xb7C2bcAA4437425cfcE9d233bFf15EF461273D63` |
-
-Add any addresses that differ from the compose defaults to your `.env`:
+Patch `compose.local.yaml` `x-env` or add to `.env` — **do not** trust Mugen
+defaults:
 
 ```sh
-# .env — only needed if compose.local.yaml defaults are wrong for your chain
-CARTESI_CONTRACTS_INPUT_BOX_ADDRESS=0x1b51e2992A2755Ba4D6F7094032DF91991a0Cfac
-CARTESI_CONTRACTS_AUTHORITY_FACTORY_ADDRESS=0x5E96408CFE423b01dADeD3bc867E6013135990cc
-CARTESI_CONTRACTS_APPLICATION_FACTORY_ADDRESS=0x26E758238CB6eC5aB70ce0dd52aF2d7b82e1972E
-CARTESI_CONTRACTS_SELF_HOSTED_APPLICATION_FACTORY_ADDRESS=0x010D3CbB4223F5bCc7b7B03cEE59f3aAea8eDb8A
+# .env — values from cartesi-rollups-3.0.0-alpha.6.json (example)
+CARTESI_CONTRACTS_INPUT_BOX_ADDRESS=0x346B3df038FE9f8380071eC6514D5a83aD143939
+CARTESI_CONTRACTS_AUTHORITY_FACTORY_ADDRESS=0x3C1FE01c542a88A523FF6847eD1E26176c8C4ED0
+CARTESI_CONTRACTS_QUORUM_FACTORY_ADDRESS=0x1f94009389F408B8D0ADfFcF8BBDCe5552BaCa5F
+CARTESI_CONTRACTS_APPLICATION_FACTORY_ADDRESS=0xC549F89cF1ca43eDDECC64Ac2208F4b283B1c483
+CARTESI_CONTRACTS_SELF_HOSTED_APPLICATION_FACTORY_ADDRESS=0x6145C5996a71a379E030aEb0440df79D60833418
 ```
+
+> **Local devnet**: These addresses do NOT apply to `cartesi run`. Use
+> `cartesi address-book` for local Anvil.
+
+### v3 ops environment variables
+
+```sh
+# Optional — default 5; caps repeated acceptClaim gas spend before app → FAILED
+CARTESI_CLAIMER_MAX_ACCEPT_ATTEMPTS=5
+```
+
+Fund **guardian** and **gas-payer** accounts if the app may need emergency
+withdrawal (`withdrawal_config` guardian must match the foreclose signer).
 
 ---
 
@@ -261,16 +347,26 @@ docker compose -f compose.local.yaml logs -f advancer
 
 With the node running, deploy the application contracts to the blockchain
 and register the application on the node using `cartesi-rollups-cli` inside
-the advancer container:
+the advancer container.
+
+### Contracts v3 — standard deploy
 
 ```sh
 docker compose -f compose.local.yaml exec advancer \
   cartesi-rollups-cli deploy application <app-name> \
   /var/lib/cartesi-rollups-node/snapshot/ \
   --epoch-length 10 \
+  --claim-staging-period <N> \
+  --withdrawal-config-file <valid-config.json> \
   --salt <unique-32byte-hex-salt> \
   --register
 ```
+
+- `--claim-staging-period <N>`: blocks that must elapse after staging before
+  `acceptClaim` is valid on-chain.
+- `--withdrawal-config-file`: JSON defining guardian and accounts-drive layout.
+  Partial or invalid config **must** be rejected before any on-chain tx.
+- Alternative: `--withdrawal-config` inline if supported by your CLI version.
 
 Replace:
 
@@ -283,6 +379,31 @@ Replace:
 
 > **Record the application contract address** printed after this command.
 > You will need it for InputBox calls, frontends, and L1 contracts.
+
+### Deploy quorum consensus (v3)
+
+For multi-validator quorum tests:
+
+```sh
+docker compose -f compose.local.yaml exec advancer \
+  cartesi-rollups-cli deploy quorum ...
+```
+
+See `cartesi-contracts` for quorum staging behaviour (`CLAIM_SUBMITTED` →
+event-driven `CLAIM_STAGED` → `CLAIM_ACCEPTED`).
+
+### Legacy deploy (no v3 flags)
+
+If targeting a pre-v3 contract suite only:
+
+```sh
+docker compose -f compose.local.yaml exec advancer \
+  cartesi-rollups-cli deploy application <app-name> \
+  /var/lib/cartesi-rollups-node/snapshot/ \
+  --epoch-length 10 \
+  --salt <unique-32byte-hex-salt> \
+  --register
+```
 
 ### Deploy with an existing consensus contract
 
@@ -351,12 +472,31 @@ docker compose -f compose.local.yaml exec advancer \
 
 ## Step 7 — Verify the deployment
 
-### Check the app is registered and enabled
+### Check the app is registered and healthy
 
 ```sh
 docker compose -f compose.local.yaml exec advancer \
   cartesi-rollups-cli app list
+
+# v3 application fields
+docker compose -f compose.local.yaml exec advancer \
+  cartesi-rollups-cli contract <app-name>
 ```
+
+Expect `enabled`, `status`, `claim_staging_period`, `withdrawal_config` —
+not the old single `state` field. Healthy normal operation:
+`enabled=true`, `status=OK`.
+
+### Confirm claim staging path (Authority)
+
+After sending an input and closing an epoch:
+
+```sh
+docker compose -f compose.local.yaml exec advancer \
+  cartesi-rollups-cli read epochs <app-name>
+```
+
+Watch: `CLAIM_SUBMITTED` → `CLAIM_STAGED` → `CLAIM_ACCEPTED`.
 
 ### Send a test advance input
 
@@ -437,6 +577,36 @@ $EXEC execute <app-name> <output-index> --yes
 
 ---
 
+## Step 8b — Operator CLI (contracts v3 emergency flows)
+
+All commands run inside the advancer container. Requires compose deployment —
+not available with `cartesi run` alone.
+
+```sh
+EXEC="docker compose -f compose.local.yaml exec advancer cartesi-rollups-cli"
+
+# Guardian foreclose (signer must match withdrawal_config guardian)
+$EXEC foreclose <app-name>
+
+# Prove accounts-drive merkle root (after machine-tool generates proof)
+$EXEC prove-drive-root <app-name> --proof-file drive-root-proof.json
+
+# Withdraw account (gas payer can differ from recipient)
+$EXEC withdraw <app-name> --proof-file account-proof.json
+
+# Read recorded withdrawal rows
+$EXEC read withdrawals <app-name>
+$EXEC read withdrawals <app-name> <account-index>
+```
+
+Proof files come from `cartesi-rollups-machine-tool` (replay snapshot →
+`prove accounts-drive`). Full sequence: `cartesi-contracts`.
+
+After foreclosure, do **not** disable the app automatically if you still need
+post-foreclosure L1 observation (drive-prove and withdrawal events).
+
+---
+
 ## Step 9 — Manage execution parameters
 
 ```sh
@@ -479,7 +649,8 @@ $EXEC app execution-parameters load <app-name> <<< '{
 # Stop all services (preserves data volume)
 docker compose -f compose.local.yaml down
 
-# Stop and wipe all data (full reset)
+# Stop and wipe all data (full reset — required when moving v2-alpha DB to v3,
+# or when bumping node versions such as alpha.11 → alpha.12)
 docker compose -f compose.local.yaml down -v
 
 # Restart after code changes:
@@ -512,12 +683,15 @@ docker compose -f compose.local.yaml --env-file .env up -d
 After completing this skill, report back to the user with:
 
 - CLI version and project version detected
-- Target network (chain ID, RPC endpoint)
+- Runtime image tag and confirmed `cartesi-rollups-node --version` inside advancer
+- Target network (chain ID, RPC endpoint, default block mode)
 - Application contract address (from `cartesi-rollups-cli deploy application` output) — **this must be saved**
 - Authority consensus contract address (if a new one was deployed or an existing one reused)
 - Salt value used for deterministic deployment (record for reproducibility)
 - All six Docker Compose service statuses from `docker compose ps`
-- Confirm app appears in `cartesi-rollups-cli app list` with status `enabled`
+- Confirm app appears in `cartesi-rollups-cli app list` with `enabled=true`, `status=OK`
+- `claim_staging_period` and `withdrawal_config` recorded from deploy
+- Epoch staging observed: `CLAIM_STAGED` before `CLAIM_ACCEPTED` (Authority)
 - Test advance input result: accepted / rejected and any notices produced
 - Inspect endpoint URL: `http://<host>:10012`
 - JSON-RPC API endpoint URL: `http://<host>:10011`
@@ -532,6 +706,7 @@ After completing this skill, report back to the user with:
 | Debug node startup, advance processing, or inspect | `cartesi-debug`        |
 | Run app locally first before deploying to testnet  | `cartesi-local-dev`    |
 | Execute a voucher after epoch is accepted          | `cartesi-contracts` |
+| Emergency foreclosure / withdrawal operator flow | `cartesi-contracts` |
 
 ## Resources
 
@@ -540,21 +715,31 @@ After completing this skill, report back to the user with:
 
 - [Cartesi Self-Hosted Deployment Guide](https://docs.cartesi.io/cartesi-rollups/2.0/deployment/self-hosted/) — official deployment walkthrough
 - [Mugen-Builders compose setup](https://github.com/Mugen-Builders/deployment-setup-v2.0) — `compose.local.yaml` source
-- [Cannon registry — cartesi-rollups v2.2.0](https://usecannon.com/packages/cartesi-rollups/2.2.0/84532-main/deployment/contracts) — contract addresses by chain (client-side rendered; open in browser)
+- [`cartesi-contracts/cartesi-rollups-3.0.0-alpha.6.json`](../cartesi-contracts/cartesi-rollups-3.0.0-alpha.6.json) — checked-in infrastructure addresses (8 chains, identical suite)
+- [Cannon registry — cartesi-rollups 3.0.0-alpha.6](https://usecannon.com/packages/cartesi-rollups/3.0.0-alpha.6/84532-main/deployment/contracts) — secondary verification by chain
+- [Cartesi Rollups node v2.0.0-alpha.12 release](https://github.com/cartesi/rollups-node/releases/tag/v2.0.0-alpha.12) — node binary release
 - [Cartesi Rollups node GitHub](https://github.com/cartesi/rollups-node) — runtime image tags and release notes
+- [Cartesi CLI SDK 0.12.0-alpha.41 release](https://github.com/cartesi/cli/releases/tag/%40cartesi%2Fsdk%400.12.0-alpha.41) — host CLI that bundles node alpha.12
 
 ## Agent checklist
 
-- [ ] Detected CLI version with `cartesi --version`
+- [ ] Detected CLI version with `cartesi --version` (prefer `@cartesi/sdk@0.12.0-alpha.40+` for alpha.12)
 - [ ] Detected project version from Dockerfile (`MACHINE_EMULATOR_TOOLS_VERSION` vs `MACHINE_GUEST_TOOLS_VERSION`)
 - [ ] Ran `cartesi build` — snapshot at `.cartesi/image/`
 - [ ] Downloaded `compose.local.yaml` to project root
-- [ ] Created `.env` with required variables (addresses from `cartesi address-book` or Cannon, not hardcoded)
+- [ ] Patched compose for alpha.12: bumped images to `0.12.0-alpha.41`, removed `CARTESI_BLOCKCHAIN_WS_ENDPOINT`, set `latest` default block
+- [ ] Verified `cartesi-rollups-node --version` reports `2.0.0-alpha.12` inside advancer
 - [ ] Started node: `docker compose -f compose.local.yaml --env-file .env up -d`
 - [ ] Verified all containers healthy: `docker compose -f compose.local.yaml ps`
 - [ ] Ran `cartesi-rollups-cli deploy application` inside advancer — recorded app contract address
-- [ ] Confirmed app appears in `cartesi-rollups-cli app list`
 - [ ] Sent test advance input and read output to confirm end-to-end
+- [ ] Verified runtime image tag in `compose.local.yaml` matches contracts v3 suite
+- [ ] Overrode compose factory addresses from `cartesi-rollups-3.0.0-alpha.6.json` — not Mugen defaults or v2.2.0
+- [ ] `.env` has no `BLOCKCHAIN_WS_ENDPOINT` (alpha.12 uses HTTP only)
+- [ ] On v3 deploy: passed `--claim-staging-period` and valid `--withdrawal-config-file`
+- [ ] Confirmed `cartesi-rollups-cli contract <app>` shows `enabled`, `status`, v3 fields
+- [ ] Observed epoch `CLAIM_STAGED` → `CLAIM_ACCEPTED` on test input (Authority)
+- [ ] Fresh DB used for v3 alpha (no reused v2-alpha volume without migration; wipe on node version bump)
 
 ## What comes next
 

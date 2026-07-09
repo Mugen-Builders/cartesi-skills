@@ -1,25 +1,23 @@
 ---
 name: cartesi-debug
-version: 0.1.0
+version: 0.2.0
 description: >-
-  Diagnose and fix errors across the Cartesi Rollups v2 stack. Use this
-  whenever the user hits an error, unexpected behaviour, or a failed operation
-  at any layer — CLI version confusion, build, run, node startup, application
-  deployment, advance processing, inspect, voucher execution, or blockchain
-  interaction. Triggers on: "error", "failed", "not working", "stuck", "wrong
-  output", "inspect returns nothing", "advance not processed", "deploy failed",
-  "deploy command not found", "chain id mismatch", "port", "container",
-  "docker", "node won't start", "debug", "troubleshoot", "cartesi run fails",
-  "wrong version", "command not found".
+  Diagnose and fix errors across the Cartesi Rollups stack including contracts
+  v3 lifecycle issues (claim staging, foreclosure, emergency withdrawal,
+  enabled/status). Use whenever the user hits an error or unexpected behaviour
+  at any layer. Triggers on: "error", "failed", "not working", "stuck",
+  "CLAIM_STAGED", "FORECLOSED", "INOPERABLE", "foreclose", "withdrawal",
+  "acceptClaim", "staging period", "debug", "troubleshoot".
 ---
 
 ## Skill Version
 
-| Skill           | Version | Cartesi Rollups target               | Compose setup       | Last updated |
+| Skill           | Version | Cartesi Rollups target | Compose setup       | Last updated |
 | --------------- | ------- | ------------------------------------ | ------------------- | ------------ |
-| `cartesi-debug` | `0.1.0` | v2.0-alpha (CLI v1.5 and v2.0-alpha) | Mugen-Builders v2.0 | May 2026     |
+| `cartesi-debug` | `0.2.0` | contracts v3           | Mugen-Builders v2.0 | Jun 2026     |
 
-> Error messages, command names, and Dockerfile markers documented here target CLI v1.5 and v2.0-alpha. If the user is on a newer CLI version, some symptoms or fixes may have changed — always start diagnosis with `cartesi --version`.
+> Lifecycle semantics and operator flows: `cartesi-contracts`. JSON-RPC field
+> reference: `cartesi-jsonrpc`.
 
 > **`cartesi-rollups-cli` execution context**: every `cartesi-rollups-cli`
 > command in this file runs **inside the advancer container** of a
@@ -29,7 +27,7 @@ description: >-
 > endpoint and the JSON-RPC API instead (see `cartesi-local-dev` and
 > `cartesi-jsonrpc`).
 
-# Cartesi Rollups v2 — Debugging and Troubleshooting
+# Cartesi Rollups — Debugging and Troubleshooting
 
 ## Goal
 
@@ -473,17 +471,76 @@ cast block <block-number> --rpc-url <RPC_URL>
 
 ### Symptom: Voucher cannot be executed — epoch not yet accepted
 
-Vouchers require the epoch to be closed and the claim accepted. Check:
+Vouchers require the epoch to be closed and the claim **accepted**. On
+contracts v3 Authority/Quorum, acceptance follows staging:
 
 ```sh
 cartesi-rollups-cli read epochs <app-name>
-# Look for CLAIM_ACCEPTED status
+# Authority/Quorum: CLAIM_SUBMITTED → CLAIM_STAGED → CLAIM_ACCEPTED
+# PRT: skips CLAIM_STAGED
 ```
 
-If the epoch is still OPEN or CLAIM_SUBMITTED, wait for the chain to advance
-or reduce epoch length in development.
+If the epoch is `CLAIM_SUBMITTED` or `CLAIM_STAGED`, wait for the staging
+period to elapse and for `acceptClaim` to succeed. Reduce epoch length or
+`claim_staging_period` in development.
 
-### Symptom: Voucher validation fails on-chain
+### Symptom: Epoch stuck at CLAIM_STAGED
+
+1. Confirm enough blocks have passed (`claim_staging_period` from deploy).
+2. Check claimer logs for repeated `acceptClaim` failures.
+3. Set `CARTESI_CLAIMER_MAX_ACCEPT_ATTEMPTS` (default `5`) — exceeding it
+   moves the app to `FAILED`.
+4. Early `acceptClaim` (before staging period) reverts on-chain — expected.
+
+---
+
+## Layer 9 — Contracts v3 lifecycle
+
+### Symptom: `enabled` / `status` missing in API or CLI reads
+
+**Cause:** Old node binary, wrong contract suite, or JSON-RPC client still
+expecting the deprecated `state` field.
+
+**Fix:** Verify `cartesi-rollups-runtime` image tag in `compose.local.yaml`
+matches `cartesi-rollups 3.0.0-alpha.6`. Update clients to read `enabled` +
+`status`. See `cartesi-jsonrpc`.
+
+### Symptom: Node behaves erratically after upgrade
+
+**Cause:** Reused v2-alpha database against v3 node (migration `000001` changed).
+
+**Fix:** `docker compose -f compose.local.yaml down -v` and start with a
+fresh database. Do not reuse a v2-alpha DB without an explicit migration plan.
+
+### Symptom: App `status=FORECLOSED` — is this corruption?
+
+**No.** `FORECLOSED` is the normal emergency path after guardian `foreclose()`.
+A healthy foreclosed app is typically `enabled=true`, `status=FORECLOSED`,
+`foreclose_block > 0`. Use `INOPERABLE` for local mismatch or corruption.
+
+### Symptom: Foreclose succeeds but no withdrawal rows
+
+**Cause:** Accounts-drive merkle root not proved yet.
+
+**Fix:** Run the full sequence — machine-tool replay/prove →
+`prove-drive-root` → `withdraw`. Withdrawal rows appear only after drive root
+is proved on L1. See `cartesi-deploy` Step 8b and `cartesi-contracts`.
+
+### Symptom: `cartesi-rollups-cli foreclose` / `withdraw` not found
+
+**Cause:** Using `cartesi run` only — internal operator CLI requires compose.
+
+**Fix:** Switch to compose deployment (`cartesi-deploy`).
+
+### Symptom: Bad withdrawal config at deploy
+
+Partial or invalid `withdrawal_config` should be rejected before any on-chain
+tx. If deploy succeeded with wrong guardian or drive layout, emergency recovery
+will fail — redeploy with corrected config.
+
+---
+
+## Layer 10 — Voucher validation (on-chain)
 
 1. Verify the output proof was generated (epoch must be CLAIM_ACCEPTED).
 2. Check the destination contract is deployed and ABI matches.
@@ -548,7 +605,13 @@ https://www.4byte.directory/ — paste the 4-byte selector to identify the error
 | `insufficient funds`                 | Wallet has no ETH                    | Fund wallet or use Anvil default mnemonic                                              |
 | Inspect returns no reports           | Handler not emitting report          | Always emit a report, even on error                                                    |
 | State unchanged after advance        | Input rejected or still processing   | Read reports, check handler return value                                               |
-| Voucher not executable               | Epoch not yet accepted               | Wait for `CLAIM_ACCEPTED` epoch status                                                 |
+| Voucher not executable               | Epoch not yet `CLAIM_ACCEPTED`       | Wait through `CLAIM_STAGED` + staging period (Authority/Quorum)          |
+| Epoch stuck at `CLAIM_STAGED`        | Staging period not elapsed / claimer | Wait blocks; check `CARTESI_CLAIMER_MAX_ACCEPT_ATTEMPTS` and claimer logs |
+| `enabled`/`status` missing           | Old node or wrong contract suite     | Verify runtime image tag; update JSON-RPC clients                        |
+| `FORECLOSED` after foreclose         | Normal emergency path                | Not corruption — proceed with prove-drive-root → withdraw                  |
+| No withdrawal rows after foreclose   | Drive root not proved                | Run `prove-drive-root` before `withdraw`                                 |
+| Internal CLI not found               | `cartesi run` only                   | Use compose deployment (`cartesi-deploy`)                                |
+| v2 DB + v3 node                      | Schema mismatch                      | `docker compose down -v`; fresh database                               |
 | Unknown 4-byte selector in revert    | Missing custom error ABI             | Add custom errors to ABI, check 4byte.directory                                        |
 
 ---
@@ -572,7 +635,8 @@ After completing this skill, report back to the user with:
 | Resume local testing (`cartesi run`)             | `cartesi-local-dev`    |
 | Fix L1 contract revert or InputBox interaction   | `cartesi-contracts` |
 | Re-implement the advance/inspect handler         | `cartesi-backend-core` + `cartesi-backend-py` / `cartesi-backend-js-ts` |
-| Query outputs after node is healthy              | `cartesi-jsonrpc`      |
+| Query outputs or withdrawals after node is healthy | `cartesi-jsonrpc`      |
+| Emergency foreclosure / withdrawal sequence        | `cartesi-contracts`, `cartesi-deploy` |
 
 ## Resources
 
@@ -582,7 +646,7 @@ After completing this skill, report back to the user with:
 - [Cartesi Rollups v2 Troubleshooting](https://docs.cartesi.io/cartesi-rollups/2.0/) — official docs; check release notes for known issues
 - [4byte.directory](https://www.4byte.directory/) — decode 4-byte Solidity error selectors
 - [Cartesi Rollups node GitHub — Issues](https://github.com/cartesi/rollups-node/issues) — known bugs and workarounds
-- [Mugen-Builders compose setup](https://github.com/Mugen-Builders/deployment-setup-v2.0) — compose file reference for node service configuration
+- [Mugen-Builders compose setup](https://github.com/Mugen-Builders/deployment-setup-v2.0) — compose file reference
 
 ## Agent checklist
 
@@ -594,7 +658,10 @@ After completing this skill, report back to the user with:
 - [ ] For node failures: checked Postgres, DB connection string, and migration status
 - [ ] For advance not processing: verified InputBox address (from `cartesi address-book`), EVM Reader logs, and on-chain tx
 - [ ] For inspect issues: confirmed URL format, port, and that handler emits at least one report
-- [ ] For voucher failures: confirmed epoch has `CLAIM_ACCEPTED` status
+- [ ] For voucher failures: confirmed epoch `status == "CLAIM_ACCEPTED"` (via `CLAIM_STAGED` on Authority/Quorum)
+- [ ] For v3: distinguished `FORECLOSED` (normal) from `INOPERABLE` (corruption/mismatch)
+- [ ] For foreclosure: verified prove-drive-root before expecting withdrawal rows
+- [ ] For version upgrade: ruled out v2-alpha DB reuse against v3 node
 - [ ] Unknown selectors looked up at https://www.4byte.directory/
 
 ## What comes next
