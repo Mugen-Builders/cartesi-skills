@@ -1,6 +1,6 @@
 ---
 name: cartesi-workflow
-version: 0.1.0
+version: 0.2.0
 description: >-
   Starter guide and routing map for the Cartesi Rollups v2 skill pack. Use this
   whenever the user is new to Cartesi, is unsure which skill to load, asks
@@ -17,7 +17,12 @@ description: >-
 
 | Skill              | Version | Cartesi Rollups target               | Last updated |
 | ------------------ | ------- | ------------------------------------ | ------------ |
-| `cartesi-workflow` | `0.1.0` | v2.0-alpha (CLI v1.5 and v2.0-alpha) | May 2026     |
+| `cartesi-workflow` | `0.2.0` | v2.0-alpha — Cartesi CLI `2.0.0-alpha.42`, rollups-node `v2.0.0-alpha.14`, contracts `cartesi-rollups` 3.0.0-alpha.10, Dave 3.0.0-alpha.6, cartesi-machine 0.22 | Nov 2026     |
+
+> **Stack baseline.** These skills target one matched set of versions (table
+> above). The set is not backward compatible with node alpha.12/alpha.13:
+> applications must be rebuilt with CLI alpha.42, redeployed against the
+> 3.0.0-alpha.10 contracts, and run on a fresh node database.
 
 > This skill is a **routing layer only**. All implementation detail lives in
 > the linked skills. If a downstream skill contradicts this file, the
@@ -109,16 +114,18 @@ Wallet flows, sending inputs to InputBox, reading outputs and reports.
 Build the machine image, run a local devnet, send advance/inspect
 requests, read outputs, optionally fork a real chain.
 
-- **Primary**: `cartesi-local-dev` — `cartesi build`, `cartesi run`,
-  devnet tokens, forked-chain testing.
+- **Primary**: `cartesi-local-dev` — `cartesi build`, `cartesi run`
+  (single port `6751`: `/anvil`, `/rpc`, `/inspect`), `cartesi send` /
+  `deposit`, devnet tokens, forked-chain testing, `cartesi run --prt`.
 
 ### Phase 6 — Deploy
 
 Deploy to a self-hosted node (testnet or production-style) using the
 Mugen-Builders Docker Compose setup.
 
-- **Primary**: `cartesi-deploy` — compose flow, `.env`, app registration,
-  lifecycle management, node component reference.
+- **Primary**: `cartesi-deploy` — compose flow, `.env`, app registration
+  (Authority, Quorum or PRT), lifecycle management, emergency operator
+  flows, node component reference.
 
 ### Ongoing — Debug
 

@@ -181,6 +181,15 @@ Reprocessing all inputs from genesis MUST reconstruct the exact current state.
 
 The `/finish` loop defines execution truth.
 
+> **Two transports, same semantics.** Most templates (Python, Go, Rust, C++,
+> Lua, Java, Ruby) poll the rollup HTTP server's `POST /finish`. The current
+> JavaScript and TypeScript templates use the `@cartesi/rollup` package (and
+> `cpp-low-level` uses libcmt directly)
+> instead (`rollup.finish({ accept })` / `rollup.run(...)`, no HTTP server). The
+> rules below apply to both: "status" is the HTTP `accept`/`reject` string in
+> one and the handler's boolean result in the other. See
+> `cartesi-backend-js-ts`.
+
 ### Requirements
 
 - `finish.status` MUST reflect actual handler result.

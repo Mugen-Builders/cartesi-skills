@@ -1,6 +1,6 @@
 ---
 name: cartesi-frontend
-version: 0.2.0
+version: 0.3.0
 description: >-
   Build Cartesi Rollups frontend applications with wallet integration, app I/O,
   configuration, and optional asset bridging. Covers contracts v3 application
@@ -15,8 +15,20 @@ description: >-
 
 | Skill              | Version | Contract suite              | Last updated |
 | ------------------ | ------- | --------------------------- | ------------ |
-| `cartesi-frontend` | `0.2.0` | `cartesi-rollups` 3.0.0-alpha.6 | Jun 2026     |
+| `cartesi-frontend` | `0.3.0` | `cartesi-rollups` 3.0.0-alpha.10 (rollups-node `v2.0.0-alpha.14`, Cartesi CLI `2.0.0-alpha.42`) | Nov 2026     |
 
+> **Node alpha.14 / CLI alpha.42 essentials for frontends**
+>
+> - Every JSON-RPC result is wrapped: read `result.data` (and
+>   `result.pagination` for lists). send `params` as an object with named fields.
+> - With `cartesi run`, one port (default `6751`) serves `/anvil` (L1 RPC),
+>   `/rpc` (Cartesi JSON-RPC) and `/inspect`. `localhost:8545` is not exposed.
+> - Inspect takes the **raw request body** as the payload — not JSON.
+> - Portal function names changed in contracts v3 (`depositErc20Tokens`,
+>   `depositErc721Token`, `depositSingleErc1155Token`). Use ABIs from the
+>   3.0.0-alpha.10 suite; confirm the `@cartesi/viem` / `@cartesi/wagmi`
+>   version you pin targets it.
+>
 > Application health uses `enabled` + `status` on contracts v3 nodes — not the
 > old `state` field. Emergency L1 withdrawals use `cartesi_listWithdrawals`;
 > backend voucher withdrawals remain outputs. See `cartesi-jsonrpc` and
@@ -89,7 +101,7 @@ Keep these concerns in distinct modules/files:
    - Environment parsing and validation (`APP_ADDRESS`, Cartesi JSON-RPC URL, chain IDs, local L1 RPC URL).
    - Typed config object and validation on startup.
    - No wallet or business logic in config module.
-   - For local runs, include explicit local chain settings (for example `VITE_ANVIL_RPC_URL`, `VITE_L1_CHAIN_ID`).
+   - For local runs, include explicit local chain settings (for example `VITE_ANVIL_RPC_URL=http://127.0.0.1:6751/anvil`, `VITE_CARTESI_RPC_URL=http://127.0.0.1:6751/rpc`, `VITE_L1_CHAIN_ID=31337`). Take the port from the `cartesi run` output.
    - On contracts v3 nodes, expect `enabled` and `status` from `cartesi_getApplication` — do not read deprecated `state`.
 
 2. **Wallet layer**
@@ -102,11 +114,11 @@ Keep these concerns in distinct modules/files:
    - Send input payloads to InputBox contract.
    - Read notices, vouchers, delegated vouchers, reports, and input/epoch status via Cartesi JSON-RPC.
    - Read **emergency withdrawal** rows via `cartesi_listWithdrawals` / `cartesi_getWithdrawal` when building operator or post-foreclosure dashboards.
-   - Poll epoch status through the v3 staging path (`CLAIM_SUBMITTED` → `CLAIM_STAGED` → `CLAIM_ACCEPTED`) before treating vouchers as executable.
+   - Poll epoch status through the v3 staging path (`CLAIM_SUBMITTED` → `CLAIM_STAGED` → `CLAIM_ACCEPTED`; PRT apps go `CLAIM_COMPUTED` → `CLAIM_STAGED` → `CLAIM_ACCEPTED`) before treating vouchers as executable.
    - Provide inspect call helpers as a read-only state check path (`POST /inspect/<application>`).
    - Data transformation utilities (hex <-> utf-8, formatting and pagination).
    - Support response shape compatibility across alpha versions (for example `decoded_data.type` / `decoded_data.payload` vs older `output_type` / `payload` fields).
-   - Surface application health: `enabled`, `status` (`OK`, `FAILED`, `INOPERABLE`, `FORECLOSED`), and `foreclose_block` when relevant.
+   - Surface application health: `enabled`, `status` (`OK`, `FAILED`, `DIVERGED`, `CORRUPTED`, `GUEST_EXCEPTION`, `MACHINE_HALTED`, `MCYCLE_OVERFLOW`, `UNEXPECTED_YIELD`, `INVALID_OUTPUTS_ROOT`), `consensus_type`, and foreclosure — a non-zero `foreclose_block`, which is not a status value.
 
 4. **UI layer**
    - Composes wallet + I/O modules into components/pages.
@@ -152,13 +164,14 @@ Keep these concerns in distinct modules/files:
   - output listing/details (voucher withdrawals — normal app egress)
   - report listing/details
   - withdrawal listing/details (`cartesi_listWithdrawals`, `cartesi_getWithdrawal` — emergency L1 path)
-- Implement pagination and optional filters (`limit`, `offset`, `epoch_index`, `input_index`, etc.).
-- Handle JSON-RPC error objects explicitly.
+- Implement pagination and optional filters (`limit`, `offset`, `descending`, `from`/`to`, `epoch_index`, `input_index`, `executed`, etc.).
+- Unwrap the envelope: single results are `result.data`, lists are `result.data` + `result.pagination`.
+- Handle JSON-RPC error objects explicitly (`-31001` not found yet — safe to poll; `-31002` unknown application — configuration error).
 - Decode outputs from both:
   - `decoded_data` (`type`, `payload`) when present, and
   - legacy/raw payload fields as fallback.
 
-**Voucher readiness:** only enable execute/submit UX when epoch `status === "CLAIM_ACCEPTED"`. On Authority/Quorum, `CLAIM_SUBMITTED` or `CLAIM_STAGED` is not sufficient.
+**Voucher readiness:** only enable execute/submit UX when epoch `status === "CLAIM_ACCEPTED"`. `CLAIM_SUBMITTED` or `CLAIM_STAGED` is not sufficient, on any consensus type. `cartesi_listOutputs` with `executed: false` lists outputs not yet executed.
 
 **Withdrawal types — do not conflate:**
 
@@ -173,9 +186,10 @@ Emergency withdrawal UI is operator-focused; normal dApp UIs only need voucher o
 
 - Implement a dedicated inspect helper in I/O module, separate from `addInput`:
   - request: `POST <node-url>/inspect/<application-address-or-name>`
-  - headers: `Content-Type: application/json`
-  - body: inspect payload (for example `JSON.stringify("test")` or app-specific serialized query)
-- Parse inspect response reports and decode payloads for UI display.
+  - headers: `Content-Type: application/octet-stream`
+  - body: the raw inspect payload bytes (for example the string `stats`, or a `Uint8Array`). Do **not** send `{"payload":"0x..."}` — the node hands the body to the backend as-is, so a JSON wrapper arrives literally. If the backend expects JSON, the body is that JSON document itself.
+- Parse the response: `{ status, reports: [{ payload }], processed_input_count }` with `status` one of `Accepted`, `Rejected`, `Exception`, `MachineHalted`, `Failed`; decode report payloads (hex) for UI display.
+- Handle `404` (unknown application) and `503` (machine not ready, application foreclosed, application terminated, or inspect capacity exhausted).
 - Treat inspect as read-only app state check:
   - do not mix inspect endpoint logic with InputBox advance submit logic,
   - keep inspect UI/loading/error state isolated from transaction submit state.
