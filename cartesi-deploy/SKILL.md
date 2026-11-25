@@ -203,9 +203,16 @@ Download the official Mugen-Builders deployment compose file into the
 
 ```sh
 curl -L \
-  https://raw.githubusercontent.com/Mugen-Builders/deployment-setup-v2.0/main/compose.local.yaml \
+  https://raw.githubusercontent.com/Mugen-Builders/deployment-setup-v2.0/98847c19660b46cd9f1b1c8ff9f8cf7f88039f98/compose.local.yaml \
   -o compose.local.yaml
 ```
+
+The URL is pinned to the commit the patch steps below were written and tested
+against (node alpha.12 images, `cartesi-rollups` 3.0.0-alpha.6 defaults) — the
+same commit the official self-hosted deployment docs use. Do not switch it to
+`main`: once that repository is updated, the patch steps would no longer match
+the file. If a newer commit already ships `0.12.0-alpha.45` images and the
+3.0.0-alpha.10 addresses, use it as-is and skip the image and address patches.
 
 This compose file defines 6 services that together form the Cartesi Rollups
 Node. **Do not use the downloaded file as-is** — patch it for node alpha.14
