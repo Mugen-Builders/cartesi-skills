@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## [Unreleased] — rollups-node alpha.14 / CLI alpha.42
+## [0.2.0] — 2026-11-26
 
 Skills re-based on **Cartesi CLI `2.0.0-alpha.42`** (SDK `0.12.0-alpha.45`),
 **rollups-node `v2.0.0-alpha.14`**, **rollups contracts 3.0.0-alpha.10**,
@@ -21,7 +21,9 @@ needs a fresh database.
   artifact names `Erc20Portal`, … . Devnet test tokens have open `mint`
   functions (no pre-minted owner).
 - **JSON-RPC**: every result is `{ data }` (lists add `pagination`); `params`
-  must be an object. Examples and TypeScript snippets fixed.
+  is an object with named fields: an object wrapped in an array
+  (`"params":[{...}]`) is rejected with `-32602`. Examples and TypeScript
+  snippets fixed.
 - **Application status**: `OK | FAILED | DIVERGED | CORRUPTED | GUEST_EXCEPTION
   | MACHINE_HALTED | MCYCLE_OVERFLOW | UNEXPECTED_YIELD | INVALID_OUTPUTS_ROOT`.
   `INOPERABLE` and `FORECLOSED` removed; foreclosure is read from
