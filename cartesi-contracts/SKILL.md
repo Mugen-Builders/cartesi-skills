@@ -1,11 +1,11 @@
 ---
 name: cartesi-contracts
-version: 0.3.0
+version: 0.4.0
 description: >-
   Wire L1 smart contracts into a Cartesi Rollups application via the InputBox
   contract. Covers contracts v3 lifecycle (claim staging, withdrawal config,
   guardian foreclosure, emergency accounts-drive withdrawal), InputBox ingress,
-  portals, voucher execution, and Foundry deployment. Use when the user needs
+  refunds, PRT sentries, portals, voucher execution, and Foundry deployment. Use when the user needs
   on-chain inputs, voucher execution, withdrawal config at deploy time, or
   emergency withdrawal flows. Triggers on: "L1 contract", "InputBox", "addInput",
   "on-chain input", "oracle", "governance", "bridge", "voucher execution",
@@ -18,9 +18,9 @@ description: >-
 
 | Skill               | Version | Cartesi Rollups target | Contract suite              | Last updated |
 | ------------------- | ------- | ---------------------- | --------------------------- | ------------ |
-| `cartesi-contracts` | `0.3.0` | v2.0-alpha / contracts v3 | `cartesi-rollups` 3.0.0-alpha.6 | Jul 2026     |
+| `cartesi-contracts` | `0.4.0` | v2.0-alpha / contracts v3 | `cartesi-rollups` 3.0.0-alpha.10, Dave (PRT) 3.0.0-alpha.6 | Nov 2026     |
 
-> **Contracts v3** is the current target suite (`rollups-contracts 3.0.0-alpha.6`, `dave 3.0.0-alpha.3`). Addresses differ from v2.2.0 — always resolve from Cannon or `compose.local.yaml` image tags. For local devnet (`cartesi run`), use `cartesi address-book`. Mixing old contracts, old factory addresses, or a v2-alpha DB with a v3 node binary is the highest-risk deployment mistake.
+> **Contracts v3** is the current target suite (`rollups-contracts 3.0.0-alpha.10`, `dave 3.0.0-alpha.6`), used by rollups-node `v2.0.0-alpha.14` and Cartesi CLI `2.0.0-alpha.42`. Addresses differ from both v2.2.0 **and** 3.0.0-alpha.6 — resolve them from the checked-in manifest or the release deployment artifacts. For local devnet (`cartesi run`), use `cartesi address-book`. Mixing old contracts, old factory addresses, or an older node's database with this node binary is the highest-risk deployment mistake.
 
 # Cartesi Rollups — L1 Contract Integration
 
@@ -44,19 +44,25 @@ Contracts v3 is not only a binding bump. Three areas matter for L1 integration:
 | Field | Meaning |
 | ----- | ------- |
 | `enabled` | Operator intent — whether the node should process the app |
-| `status` | System health: `OK`, `FAILED`, `INOPERABLE`, `FORECLOSED` |
+| `status` | Node-side health: `OK`, `FAILED`, `DIVERGED`, `CORRUPTED`, or a machine outcome (`GUEST_EXCEPTION`, `MACHINE_HALTED`, `MCYCLE_OVERFLOW`, `UNEXPECTED_YIELD`, `INVALID_OUTPUTS_ROOT`) |
+| `foreclose_block` | `0x0` until the on-chain foreclosure is observed |
 
-**Key distinction:** `FORECLOSED` is a **normal emergency path**, not corruption.
-`INOPERABLE` means local mismatch or corruption. A healthy foreclosed app is
-typically `enabled=true`, `status=FORECLOSED`, `foreclose_block > 0`.
+**Key distinction:** foreclosure is a **normal emergency path**, not corruption,
+and it is **not a status value**. A healthy foreclosed app is typically
+`enabled=true`, `status=OK`, `foreclose_block > 0` (on-chain:
+`isForeclosed() == true`). `DIVERGED` (the node's claim disagrees with the
+chain) and `CORRUPTED` (local state missing or inconsistent) are integrity
+faults. Every status except `OK` and `FAILED` is terminal for that application
+on the node. The earlier `INOPERABLE` and `FORECLOSED` status values no
+longer exist.
 
 The old single `state` field (`ENABLED` / `DISABLED` / `INOPERABLE`) is replaced
 by this split. JSON-RPC and CLI reads expose `enabled` and `status` — see
 `cartesi-jsonrpc`.
 
-### Claim finality (Authority / Quorum)
+### Claim finality
 
-Authority and Quorum consensus now stage claims before acceptance:
+All consensus types stage claims before acceptance:
 
 ```
 CLAIM_COMPUTED → CLAIM_SUBMITTED → CLAIM_STAGED → (wait claimStagingPeriod) → CLAIM_ACCEPTED
@@ -64,10 +70,10 @@ CLAIM_COMPUTED → CLAIM_SUBMITTED → CLAIM_STAGED → (wait claimStagingPeriod
 
 - **Authority:** submit and stage happen in the **same transaction**; `acceptClaim` is a separate tx after the staging period elapses.
 - **Quorum:** the node watches events until majority voting stages one claim, then `acceptClaim` later.
-- **PRT (Dave tournaments):** skips `CLAIM_STAGED` — moves `CLAIM_COMPUTED` → `CLAIM_ACCEPTED` directly.
+- **PRT (Dave tournaments, 3.0.0-alpha.6):** no `CLAIM_SUBMITTED`; the node posts a commitment to the epoch's tournament and, once the tournament settles, the result is staged: `CLAIM_COMPUTED` → `CLAIM_STAGED` → `CLAIM_ACCEPTED`. The application can appoint **sentries** (and a **sentry manager** that can rotate them): a claim the sentries agree with is accepted without waiting out the claim staging period. With `claimStagingPeriod = 0` a staged claim is accepted at once and sentries have no effect.
 
 Vouchers remain executable only after `CLAIM_ACCEPTED`. Do not assume
-`CLAIM_SUBMITTED` is sufficient on v3 Authority/Quorum deployments.
+`CLAIM_SUBMITTED` or `CLAIM_STAGED` is sufficient.
 
 Foreclosure before acceptance terminalizes pre-foreclosure claim work as
 `CLAIM_FORECLOSED`.
@@ -82,19 +88,33 @@ layout required for post-foreclosure recovery.
 After foreclosure, normal claim submission stops. Recovery is permissionless
 (except the guardian-only foreclose step):
 
-1. **Guardian** calls `foreclose()` — app becomes `FORECLOSED`; `foreclose_block` recorded on L1.
+1. **Guardian** calls `foreclose()` — `isForeclosed()` becomes true and the node records `foreclose_block`.
 2. **Anyone** calls `proveAccountsDriveMerkleRoot(root, proof)` — once per app.
 3. **Anyone** calls `withdraw(account, accountProof)` — gas payer can differ from recipient.
 
-Proof files come from `cartesi-rollups-machine-tool` (replay snapshot →
-`prove accounts-drive`). Operator CLI wraps steps 1–3:
+Deposits that were **not finalized** before the foreclosure (their epoch was
+never accepted) are returned through a fourth path:
+
+4. **Anyone** calls `issueRefund(inputIndex, input)` — once per deposit input.
+
+Proof files come from `cartesi-rollups-machine-tool` (`replay` → `prove
+accounts-drive`; flags in `cartesi-deploy` Step 8b). Operator CLI wraps the
+steps:
 
 ```sh
 cartesi-rollups-cli foreclose <app>
 cartesi-rollups-cli prove-drive-root <app> --proof-file drive-root-proof.json
 cartesi-rollups-cli withdraw <app> --proof-file account-proof.json
+cartesi-rollups-cli refund <app> <input-index> --input-file input.hex
 cartesi-rollups-cli read withdrawals <app>
 ```
+
+`refund` on the node CLI requires `--input-file`: a file with the 0x-prefixed
+`InputAdded.input` bytes of that deposit (read them from the InputBox event).
+
+On a local `cartesi run` devnet the host CLI does the same without proof
+files: `cartesi foreclose`, `cartesi withdraw --account <address>`,
+`cartesi refund <input-index>`.
 
 This is **not** the same as in-app voucher withdrawals emitted by the backend
 handler — those follow the normal notice/voucher path and execute via
@@ -105,6 +125,33 @@ Apps that may need emergency withdrawal must use an **accounts-drive layout**
 compatible with the machine tool (for example the `erc20-withdrawal-dapp`
 template). Confirm `withdrawal_config` is valid **before** any on-chain deploy
 tx — partial or invalid config must be rejected by the CLI.
+
+`withdrawal_config` fields: `guardian`, `log2_leaves_per_account`,
+`log2_max_num_of_accounts`, `accounts_drive_start_index`,
+`withdrawal_output_builder`.
+
+With Cartesi CLI alpha.42 the layout is **derived from the built machine**, not
+written by hand. In `cartesi.toml`, mark the raw drive that holds the accounts:
+
+```toml
+[drives.accounts]
+builder = "empty"
+format = "raw"
+size = "4Mi"
+accounts_drive = true          # this drive is the accounts drive
+# accounts_drive_size = "1Mi"  # optional: use only the start of a larger drive
+
+[withdrawal]                   # optional overrides
+# guardian = "0x..."                   # defaults to devnet account 1
+# withdrawal_output_builder = "0x..."  # defaults to the devnet builder; a fork MUST set it
+# account_size = 32                    # bytes per account, power of two >= 32
+```
+
+`cartesi build` prints the accounts drive and the resulting configuration.
+`[withdrawal.config]` is no longer supported. An accounts drive held in an
+nvram deploys but cannot be withdrawn from yet — use a raw flash drive. Check
+the drive keys against the template you are using; unknown keys in
+`cartesi.toml` fail the build.
 
 ## Core mental model
 
@@ -145,67 +192,78 @@ cartesi address-book
 
 This prints every deployed address for the running Anvil network — InputBox, all portals, AuthorityFactory, ApplicationFactory, your app contract, and the auto-deployed test tokens. Use this as the single source of truth when working locally.
 
-### For testnets and production — contracts v3 (3.0.0-alpha.6)
+### For testnets and production — contracts v3 (3.0.0-alpha.10)
 
-**Primary source:** [`cartesi-rollups-3.0.0-alpha.6.json`](cartesi-rollups-3.0.0-alpha.6.json)
-in this skill directory. Infrastructure addresses are **identical** on these
-chains (deterministic Cannon deployment):
+**Primary source:** [`cartesi-rollups-3.0.0-alpha.10.json`](cartesi-rollups-3.0.0-alpha.10.json)
+in this skill directory, taken from the `cartesi/rollups-contracts`
+`v3.0.0-alpha.10` deployment artifacts (`deployments/<chain-id>/<Contract>.txt`).
+The deployment is deterministic (CREATE2), and the addresses below were
+verified for:
 
 | Chain ID | Network |
 | -------- | ------- |
-| `1` | Ethereum Mainnet |
-| `10` | Optimism Mainnet |
-| `42161` | Arbitrum One |
-| `8453` | Base Mainnet |
 | `11155111` | Ethereum Sepolia |
-| `11155420` | Optimism Sepolia |
-| `421614` | Arbitrum Sepolia |
-| `84532` | Base Sepolia |
+| `31337` | Local devnet (`cartesi run`, rollups-node devnet) |
 
-Set `BLOCKCHAIN_ID` and RPC for your target chain; override compose factory
-addresses from the manifest `contracts` object (Mugen-Builders defaults are
-**not** this suite).
+`InputBox` is also confirmed at the same address on Ethereum Mainnet (`1`).
+For any other chain, read `deployments/<chain-id>/` in the release before
+using an address — do not assume it carries over, and do not use Cannon
+entries for 3.0.0-alpha.6.
 
-**Secondary verification:** Cannon registry (client-side rendered):
-
-```
-https://usecannon.com/packages/cartesi-rollups/3.0.0-alpha.6/<chain-id>-main/deployment/contracts
-```
-
-Confirm the version by checking the `cartesi-rollups-runtime` image tag in
+Confirm the version by checking the `cartesi/rollups-runtime` image tag in
 `compose.local.yaml`. The node, contract suite, and DB schema must match.
 
-**v3 infrastructure addresses** (all listed chains):
+**v3 infrastructure addresses (3.0.0-alpha.10):**
 
 | Contract | Address |
 | -------- | ------- |
-| `InputBox` | `0x346B3df038FE9f8380071eC6514D5a83aD143939` |
-| `AuthorityFactory` | `0x3C1FE01c542a88A523FF6847eD1E26176c8C4ED0` |
-| `ApplicationFactory` | `0xC549F89cF1ca43eDDECC64Ac2208F4b283B1c483` |
-| `SelfHostedApplicationFactory` | `0x6145C5996a71a379E030aEb0440df79D60833418` |
-| `QuorumFactory` | `0x1f94009389F408B8D0ADfFcF8BBDCe5552BaCa5F` |
-| `EtherPortal` | `0x8b53327575ac999bdfa8003f4b5134DFF9027516` |
-| `ERC20Portal` | `0x22E57511C30CcE6CDaa742E13CE3b774fDC663b1` |
-| `ERC721Portal` | `0xcA3a0a47915C12F020CF70B938aCC8e744414cb8` |
-| `ERC1155SinglePortal` | `0x13663E193673756a02e84b724B8a3422A9a7aab4` |
-| `ERC1155BatchPortal` | `0x3649c5E2De91C69a7Bb80D864f0039da5E511096` |
-| `SafeERC20Transfer` | `0x15E45E779ED795E5ac4643f6C428B161ccDE7A61` |
-| `UsdWithdrawalOutputBuilderFactory` | `0xdB4EC04a2792A04cF7421f99A70F624681dd8e50` |
+| `InputBox` | `0xEbE9f4Dfc04ae10bBeE663859c3dc5A23f94eA3C` |
+| `AuthorityFactory` | `0xB4d29c86e36385b5321a453C34D288AEB0ad11f9` |
+| `QuorumFactory` | `0x0754D5Eb680c71bf469B39e48C5b64AB0813fdb9` |
+| `ApplicationFactory` | `0x35Cd91f13141Bb6A6FC69E1eeDD241bbA1Ddd45F` |
+| `SelfHostedApplicationFactory` | `0x9e6866A965dC5f99f95EF6B0d8399dad18eEf98b` |
+| `EtherPortal` | `0x035b11Be55656c6cfC822D1CaE568C1Af2e497b0` |
+| `Erc20Portal` | `0x3332DE61a8BB9aC84893b2f552Fe81C9a6dC5419` |
+| `Erc721Portal` | `0x397c352d18DFf47CC8a6143403142cf7afd5Ff7E` |
+| `Erc1155SinglePortal` | `0x585F56351A66f131E176a345662215C772f80451` |
+| `Erc1155BatchPortal` | `0xee33550a22e3Cf6Cc265524dC9bcfD99D2307EBe` |
+| `SafeErc20Transfer` | `0xBB7c5367B74544542F5cE553Ed0DF4B3efAfEEdD` |
+| `RefundOutputBuilder` | `0xff50b237b3e61cD810Bd1236644a887ec78762CF` |
+| `UsdWithdrawalOutputBuilderFactory` | `0x60b8b3c0AecEb193755038fa9372FfE910E63e39` |
+
+**PRT (Dave 3.0.0-alpha.6) — per chain:**
+
+| Chain | `DaveAppFactory` |
+| ----- | ---------------- |
+| Ethereum Mainnet (`1`) | `0x37238515E8161486C53741abe615EF1452309128` |
+| Ethereum Sepolia (`11155111`) | `0xBD2a661328595113669a6b4c235126eec8c06A15` |
+| Local devnet (`31337`) | `0xF8f6dFA3A3e40C10926839FFd8a221C87C8b2ccD` |
+
+Other PRT contracts and other chains: the `deployment-addresses` asset of the
+`cartesi/dave` `v3.0.0-alpha.6` release.
+
+> Artifact names are now spelled `Erc20Portal`, `Erc721Portal`,
+> `Erc1155SinglePortal`, `Erc1155BatchPortal`, `SafeErc20Transfer` (previously
+> `ERC20Portal`, …). `cartesi address-book` uses the same portal names but does
+> **not** list `SafeErc20Transfer` or `QuorumFactory`, and names the test tokens
+> `TestToken` (`TestFungibleToken`) and `TestNFT` (`TestNonFungibleToken`).
 
 | Contract | Role |
 | -------- | ---- |
 | `InputBox` | Single ingress point — all inputs enter Cartesi through here |
 | `EtherPortal` | Bridge native ETH into the Cartesi Machine |
-| `ERC20Portal` | Bridge ERC-20 tokens into the Cartesi Machine |
-| `ERC721Portal` | Bridge ERC-721 NFTs into the Cartesi Machine |
-| `ERC1155SinglePortal` | Bridge a single ERC-1155 token |
-| `ERC1155BatchPortal` | Bridge a batch of ERC-1155 tokens |
+| `Erc20Portal` | Bridge ERC-20 tokens into the Cartesi Machine |
+| `Erc721Portal` | Bridge ERC-721 NFTs into the Cartesi Machine |
+| `Erc1155SinglePortal` | Bridge a single ERC-1155 token |
+| `Erc1155BatchPortal` | Bridge a batch of ERC-1155 tokens |
 | `AuthorityFactory` | Deploy Authority (single-validator) consensus |
 | `QuorumFactory` | Deploy Quorum (multi-validator) consensus |
 | `ApplicationFactory` | Deploy Cartesi Application contracts |
 | `SelfHostedApplicationFactory` | Deploy application + authority in one tx |
-| `DaveAppFactory` | Deploy PRT (Dave tournament) applications — resolve from Cannon if needed |
-| `SafeERC20Transfer` | Helper for ERC-20 transfers via delegated call vouchers |
+| `DaveAppFactory` | Deploy PRT (Dave tournament) applications |
+| `SafeErc20Transfer` | Helper for ERC-20 transfers via delegated call vouchers |
+| `RefundOutputBuilder` | Builds the refund output for deposits not finalized before foreclosure |
+| `UsdWithdrawalOutputBuilderFactory` | Deploys a withdrawal output builder for a USD-like ERC-20 (used in `withdrawal_config`) |
 
 ### Legacy — cartesi-rollups v2.2.0
 
@@ -223,6 +281,12 @@ Cannon: `https://usecannon.com/packages/cartesi-rollups/2.2.0/<chain-id>-main/de
 Portals and `SafeERC20Transfer` for v2.2.0 are in the Cannon registry — do not
 mix v2 portal addresses with a v3 node.
 
+### Superseded — cartesi-rollups 3.0.0-alpha.6
+
+Addresses such as `InputBox` `0x346B3df038FE9f8380071eC6514D5a83aD143939`
+belong to 3.0.0-alpha.6 (rollups-node alpha.12). They are **not** valid for
+node alpha.14.
+
 ## Step 1 — IInputBox interface
 
 ```solidity
@@ -231,7 +295,7 @@ pragma solidity ^0.8.20;
 
 interface IInputBox {
     function addInput(
-        address application,
+        address appContract,
         bytes calldata payload
     ) external returns (bytes32);
 }
@@ -359,10 +423,17 @@ Cartesi Machine. Use these instead of writing custom deposit logic.
 
 | Asset    | Portal Contract       | Function                                                         |
 | -------- | --------------------- | ---------------------------------------------------------------- |
-| Ether    | `EtherPortal`         | `depositEther(address app, bytes execLayerData)`                 |
-| ERC-20   | `ERC20Portal`         | Approve first, then `depositERC20Tokens(...)`                    |
-| ERC-721  | `ERC721Portal`        | `setApprovalForAll` first, then `depositERC721Token(...)`        |
-| ERC-1155 | `ERC1155SinglePortal` | `setApprovalForAll` first, then `depositSingleERC1155Token(...)` |
+| Ether    | `EtherPortal`         | `depositEther(address appContract, bytes execLayerData)` (payable) |
+| ERC-20   | `Erc20Portal`         | Approve first, then `depositErc20Tokens(token, appContract, value, execLayerData)` |
+| ERC-721  | `Erc721Portal`        | `setApprovalForAll` first, then `depositErc721Token(token, appContract, tokenId, baseLayerData, execLayerData)` |
+| ERC-1155 | `Erc1155SinglePortal` | `setApprovalForAll` first, then `depositSingleErc1155Token(token, appContract, tokenId, value, baseLayerData, execLayerData)` |
+| ERC-1155 batch | `Erc1155BatchPortal` | `setApprovalForAll` first, then `depositBatchErc1155Token(token, appContract, tokenIds, values, baseLayerData, execLayerData)` |
+
+> **Function names changed in contracts v3**: `depositErc20Tokens`,
+> `depositErc721Token`, `depositSingleErc1155Token`, `depositBatchErc1155Token`
+> (lower-case `rc`). The v2 names (`depositERC20Tokens`, …) have different
+> selectors and revert against v3 portals. Update `cast` calls, ABIs and
+> frontend code. Deposit **payload layouts** (below) are unchanged.
 
 ### Local devnet portal addresses
 
@@ -372,7 +443,12 @@ When using `cartesi run`, all portal addresses are auto-deployed on Anvil. Resol
 cartesi address-book
 ```
 
-This lists `ERC20Portal`, `ERC721Portal`, `ERC1155SinglePortal`, `EtherPortal`, and all other deployed contracts. Do not use hardcoded addresses — they can change between CLI versions.
+This lists `Erc20Portal`, `Erc721Portal`, `Erc1155SinglePortal`, `Erc1155BatchPortal`, `EtherPortal`, and all other deployed contracts. `cartesi address-book Erc20Portal` prints one address (the name is matched case-insensitively); `--json` prints them all. Do not use hardcoded addresses — they can change between CLI versions.
+
+With `cartesi run` the L1 RPC is `http://127.0.0.1:<port>/anvil` (default port
+`6751`), not `localhost:8545`, and transactions should be sent from a devnet
+account other than account 0 (the node's claim signer). See `cartesi-local-dev`
+for `RPC_URL`, the default sender and the test-token mint functions.
 
 ### Depositing ERC-20 via portal (cast commands)
 
@@ -385,7 +461,7 @@ cast send <ERC20_TOKEN_ADDRESS> \
 
 # 2. Deposit tokens into the Cartesi application
 cast send <ERC20_PORTAL_ADDRESS> \
-  "depositERC20Tokens(address,address,uint256,bytes)" \
+  "depositErc20Tokens(address,address,uint256,bytes)" \
   <ERC20_TOKEN_ADDRESS> <APP_ADDRESS> <AMOUNT_WEI> 0x \
   --rpc-url <RPC_URL> --private-key <PRIVATE_KEY>
 ```
@@ -401,7 +477,7 @@ cast send <NFT_ADDRESS> \
 
 # 2. Deposit the NFT (token ID, baseLayerData, execLayerData)
 cast send <ERC721_PORTAL_ADDRESS> \
-  "depositERC721Token(address,address,uint256,bytes,bytes)" \
+  "depositErc721Token(address,address,uint256,bytes,bytes)" \
   <NFT_ADDRESS> <APP_ADDRESS> <TOKEN_ID> 0x 0x \
   --rpc-url <RPC_URL> --private-key <PRIVATE_KEY>
 ```
@@ -417,15 +493,16 @@ cast send <ERC1155_ADDRESS> \
 
 # 2. Deposit single token (tokenId, amount, baseLayerData, execLayerData)
 cast send <ERC1155_SINGLE_PORTAL_ADDRESS> \
-  "depositSingleERC1155Token(address,address,uint256,uint256,bytes,bytes)" \
+  "depositSingleErc1155Token(address,address,uint256,uint256,bytes,bytes)" \
   <ERC1155_ADDRESS> <APP_ADDRESS> <TOKEN_ID> <AMOUNT> 0x 0x \
   --rpc-url <RPC_URL> --private-key <PRIVATE_KEY>
 ```
 
 ### Handling portal deposits in your backend
 
-Portal interactions arrive as advance inputs where `metadata.msg_sender` equals
-the portal contract address. Your backend **must** check the sender to determine
+Portal interactions arrive as advance inputs where the sender
+(`metadata.msg_sender` in the HTTP API, `request.msgSender` in `@cartesi/rollup`)
+equals the portal contract address. Your backend **must** check the sender to determine
 how to decode the payload.
 
 **ERC-20 deposit payload format (bytes layout):**
@@ -436,7 +513,11 @@ bytes 20–39:  depositor address (20 bytes)
 bytes 40–71:  amount (uint256, 32 bytes, big-endian)
 ```
 
-JavaScript decode example:
+JavaScript decode example. It is written for the **rollup HTTP server** model
+(`data.metadata.msg_sender`, hex-string `data.payload`), which Python, Go, Rust
+and older JS projects use. Projects scaffolded from the current JS/TS templates
+use `@cartesi/rollup` instead: there the sender is `request.msgSender` and
+`request.payload` is a `Buffer` — see `cartesi-backend-js-ts` for that form.
 
 ```js
 import { ethers } from "ethers";
@@ -489,9 +570,9 @@ bytes 72–103: amount (uint256, 32 bytes)
 ## Step 6 — Voucher execution on-chain
 
 After an epoch closes and its claim reaches **`CLAIM_ACCEPTED`**, vouchers can
-be executed on-chain. On contracts v3 Authority/Quorum deployments, the
-epoch must pass through **`CLAIM_STAGED`** and the on-chain staging period
-before acceptance — poll epoch status via JSON-RPC or
+be executed on-chain. On contracts v3 a claim is normally staged
+(**`CLAIM_STAGED`**) and accepted only after the on-chain staging period — or,
+on PRT, as soon as all sentries agree — poll epoch status via JSON-RPC or
 `cartesi-rollups-cli read epochs <app-name>`.
 
 ```sh
@@ -513,6 +594,13 @@ export CARTESI_DATABASE_CONNECTION=...
 export CARTESI_BLOCKCHAIN_HTTP_ENDPOINT=...
 export CARTESI_AUTH_MNEMONIC="..."
 ```
+
+Execute with a key other than the one the running node uses for claims (one
+submitting process per signer). Executed and pending counts are available
+through `cartesi_getExecutedOutputCount` /
+`cartesi_getPendingExecutableOutputCount`, and
+`cartesi-rollups-cli contract output <application-address> <output-index>`
+reads the execution status straight from the chain.
 
 Vouchers encode a full contract call (`destination` + ABI-encoded payload).
 Only Vouchers and Delegated Call Vouchers are executable. Notices are
@@ -539,7 +627,7 @@ contract DeployScript is Script {
         vm.startBroadcast();
 
         // Resolve InputBox address from `cartesi address-book` (local)
-        // or from https://usecannon.com/packages/cartesi-rollups/3.0.0-alpha.6/<chain-id>-main/deployment/contracts
+        // or from cartesi-rollups-3.0.0-alpha.10.json / the rollups-contracts release artifacts
         address inputBox   = vm.envAddress("INPUT_BOX_ADDRESS");
         address application = vm.envAddress("APP_ADDRESS");
 
@@ -553,11 +641,11 @@ contract DeployScript is Script {
 ### Deploy command
 
 ```sh
-# Local Anvil
+# Local devnet started by `cartesi run` (L1 RPC is behind /anvil; devnet account 8 key)
 forge script script/Deploy.s.sol:DeployScript \
-  --rpc-url http://localhost:8545 \
+  --rpc-url http://127.0.0.1:6751/anvil \
   --broadcast \
-  --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+  --private-key 0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97
 
 # Testnet (Sepolia)
 forge script script/Deploy.s.sol:DeployScript \
@@ -572,7 +660,7 @@ forge script script/Deploy.s.sol:DeployScript \
 ```sh
 # Call sendInput on deployed contract
 cast send <feeder-address> "sendInput(bytes)" <hex-payload> \
-  --rpc-url http://localhost:8545 \
+  --rpc-url http://127.0.0.1:6751/anvil \
   --private-key <key>
 ```
 
@@ -582,7 +670,7 @@ After completing this skill, report back to the user with:
 
 - Solidity contract(s) written: filename, contract name, constructor arguments
 - Deployed contract address (from Foundry broadcast output)
-- InputBox address used (sourced from `cartesi address-book` or Cannon registry)
+- InputBox address used (sourced from `cartesi address-book` or the 3.0.0-alpha.10 manifest)
 - Access control scheme applied (onlyOwner / roles / allowlist) and who holds the role
 - Payload encoding chosen (ABI or UTF-8/JSON) and the corresponding backend decode snippet
 - Events emitted and their indexed fields
@@ -609,7 +697,8 @@ After completing this skill, report back to the user with:
 - [https://docs.cartesi.io/cartesi-rollups/2.0/development/](https://docs.cartesi.io/cartesi-rollups/2.0/development/) - Development guides
 - [https://docs.cartesi.io/cartesi-rollups/2.0/development/send-inputs-and-assets/](https://docs.cartesi.io/cartesi-rollups/2.0/development/send-inputs-and-assets/) - Inputs and inspect
 - [Cartesi Portal contracts](https://docs.cartesi.io/cartesi-rollups/2.0/development/asset-handling/) — ERC-20/721/1155 deposit interfaces and payload layouts
-- [Cannon registry — cartesi-rollups 3.0.0-alpha.6](https://usecannon.com/packages/cartesi-rollups/3.0.0-alpha.6/84532-main/deployment/contracts) — canonical v3 contract addresses (client-side rendered; open in browser)
+- [cartesi/rollups-contracts v3.0.0-alpha.10](https://github.com/cartesi/rollups-contracts/releases/tag/v3.0.0-alpha.10) — contract sources, ABIs and per-chain deployment artifacts
+- [cartesi/dave v3.0.0-alpha.6](https://github.com/cartesi/dave/releases/tag/v3.0.0-alpha.6) — PRT contracts and deployment addresses
 - [Foundry Book](https://book.getfoundry.sh/) — Forge/Cast/Anvil documentation
 - [4byte.directory](https://www.4byte.directory/) — decode unknown 4-byte error selectors from reverts
 
@@ -626,10 +715,12 @@ After completing this skill, report back to the user with:
 - [ ] Portal deposit handler checks `msg_sender` against portal address
 - [ ] Portal payload decoded using correct byte offsets for asset type
 - [ ] `cartesi address-book` used to resolve portal addresses for local devnet
+- [ ] Portal calls use the v3 function names (`depositErc20Tokens`, `depositErc721Token`, `depositSingleErc1155Token`)
+- [ ] Testnet/mainnet addresses taken from the 3.0.0-alpha.10 manifest or release artifacts — not 3.0.0-alpha.6, not v2.2.0
 - [ ] On v3 deploys: `withdrawal_config` validated before on-chain tx; guardian address matches funded key
-- [ ] Epoch reached `CLAIM_ACCEPTED` (via `CLAIM_STAGED` on Authority/Quorum) before voucher execution
+- [ ] Epoch reached `CLAIM_ACCEPTED` (after `CLAIM_STAGED`) before voucher execution
 - [ ] Voucher execution tested with `cartesi-rollups-cli execute` after epoch acceptance
-- [ ] Emergency withdrawal (`foreclose` → prove drive root → `withdraw`) distinguished from voucher `execute`
+- [ ] Emergency withdrawal (`foreclose` → prove drive root → `withdraw`, plus `refund` for unfinalized deposits) distinguished from voucher `execute`
 
 ## What comes next
 

@@ -1,0 +1,45 @@
+{
+  "suite": "cartesi-rollups",
+  "version": "3.0.0-alpha.10",
+  "prt_suite": "dave 3.0.0-alpha.6",
+  "node": "rollups-node v2.0.0-alpha.14",
+  "source": "cartesi/rollups-contracts v3.0.0-alpha.10 deployment artifacts (deployments/<chain-id>/<Contract>.txt) and the cartesi/dave v3.0.0-alpha.6 release deployment-addresses asset",
+  "verified_chains": {
+    "11155111": "Ethereum Sepolia",
+    "31337": "Local devnet (cartesi run / rollups-node devnet)"
+  },
+  "note": "Rollups contract addresses are a deterministic CREATE2 deployment and were checked for the chains in verified_chains only. For any other chain, read deployments/<chain-id>/ in the rollups-contracts release before use. InputBox is also confirmed at the same address on Ethereum Mainnet. PRT (Dave) addresses differ per chain and are listed separately. test_contracts are the test tokens and test output builder from the same deployment artifacts; on the local devnet resolve them with `cartesi address-book`, where TestFungibleToken is listed as TestToken and TestNonFungibleToken as TestNFT (SafeErc20Transfer and QuorumFactory are not listed there). Session contracts (deployed apps, per-app output builders) are not included.",
+  "contracts": {
+    "InputBox": "0xEbE9f4Dfc04ae10bBeE663859c3dc5A23f94eA3C",
+    "AuthorityFactory": "0xB4d29c86e36385b5321a453C34D288AEB0ad11f9",
+    "QuorumFactory": "0x0754D5Eb680c71bf469B39e48C5b64AB0813fdb9",
+    "ApplicationFactory": "0x35Cd91f13141Bb6A6FC69E1eeDD241bbA1Ddd45F",
+    "SelfHostedApplicationFactory": "0x9e6866A965dC5f99f95EF6B0d8399dad18eEf98b",
+    "EtherPortal": "0x035b11Be55656c6cfC822D1CaE568C1Af2e497b0",
+    "Erc20Portal": "0x3332DE61a8BB9aC84893b2f552Fe81C9a6dC5419",
+    "Erc721Portal": "0x397c352d18DFf47CC8a6143403142cf7afd5Ff7E",
+    "Erc1155SinglePortal": "0x585F56351A66f131E176a345662215C772f80451",
+    "Erc1155BatchPortal": "0xee33550a22e3Cf6Cc265524dC9bcfD99D2307EBe",
+    "SafeErc20Transfer": "0xBB7c5367B74544542F5cE553Ed0DF4B3efAfEEdD",
+    "RefundOutputBuilder": "0xff50b237b3e61cD810Bd1236644a887ec78762CF",
+    "UsdWithdrawalOutputBuilderFactory": "0x60b8b3c0AecEb193755038fa9372FfE910E63e39"
+  },
+  "prt_contracts": {
+    "1": {
+      "DaveAppFactory": "0x37238515E8161486C53741abe615EF1452309128"
+    },
+    "11155111": {
+      "DaveAppFactory": "0xBD2a661328595113669a6b4c235126eec8c06A15"
+    },
+    "31337": {
+      "DaveAppFactory": "0xF8f6dFA3A3e40C10926839FFd8a221C87C8b2ccD"
+    }
+  },
+  "test_contracts": {
+    "TestFungibleToken": "0x86EA17052C8e335Ad830B54EF566274EAB46B852",
+    "TestNonFungibleToken": "0x0761b8e3aB06F458632974393C48765E6Ddc61bB",
+    "TestMultiToken": "0xAaE893D28b7645B5E09bc16688dddd451aC89C19",
+    "TestUsdc": "0x7a051EDffC0884cd88d4a377F4C87BE074CF6c81",
+    "TestUsdWithdrawalOutputBuilder": "0xB4D253c7a110241561B3eD6d632846dF7d4e9Af7"
+  }
+}

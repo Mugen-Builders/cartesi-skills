@@ -1,20 +1,21 @@
 ---
 name: cartesi-debug
-version: 0.2.0
+version: 0.3.0
 description: >-
   Diagnose and fix errors across the Cartesi Rollups stack including contracts
   v3 lifecycle issues (claim staging, foreclosure, emergency withdrawal,
   enabled/status). Use whenever the user hits an error or unexpected behaviour
   at any layer. Triggers on: "error", "failed", "not working", "stuck",
-  "CLAIM_STAGED", "FORECLOSED", "INOPERABLE", "foreclose", "withdrawal",
-  "acceptClaim", "staging period", "debug", "troubleshoot".
+  "CLAIM_STAGED", "FAILED", "DIVERGED", "CORRUPTED", "foreclose", "withdrawal",
+  "acceptClaim", "staging period", "PRT", "tournament", "debug",
+  "troubleshoot".
 ---
 
 ## Skill Version
 
 | Skill           | Version | Cartesi Rollups target | Compose setup       | Last updated |
 | --------------- | ------- | ------------------------------------ | ------------------- | ------------ |
-| `cartesi-debug` | `0.2.0` | contracts v3           | Mugen-Builders v2.0 | Jun 2026     |
+| `cartesi-debug` | `0.3.0` | contracts v3 — rollups-node `v2.0.0-alpha.14`, Cartesi CLI `2.0.0-alpha.42` | Mugen-Builders v2.0 | Nov 2026     |
 
 > Lifecycle semantics and operator flows: `cartesi-contracts`. JSON-RPC field
 > reference: `cartesi-jsonrpc`.
@@ -24,8 +25,10 @@ description: >-
 > compose-based self-hosted deployment. Prefix each command with
 > `docker compose -f compose.local.yaml exec advancer …`. With `cartesi run`,
 > `cartesi-rollups-cli` is not on the host — use `curl` against the inspect
-> endpoint and the JSON-RPC API instead (see `cartesi-local-dev` and
-> `cartesi-jsonrpc`).
+> endpoint and the JSON-RPC API (see `cartesi-local-dev` and
+> `cartesi-jsonrpc`), `cartesi logs` / `cartesi status`, or run the binary in
+> the session's node container:
+> `docker compose -p <app-name> exec rollups_node cartesi-rollups-cli …`.
 
 # Cartesi Rollups — Debugging and Troubleshooting
 
@@ -42,19 +45,20 @@ user's problem, work through the diagnosis steps, and apply the fix.
 These are the most common source of confusion. Always resolve version
 mismatches before diagnosing anything else.
 
-### Symptom: `cartesi deploy` command not found
+### Symptom: `cartesi deploy` does nothing / "deploy command is deprecated"
 
 ```
-error: unknown command 'deploy'
+deploy command is deprecated, use 'cartesi-rollups-cli' directly instead
 ```
 
-**Cause**: The `cartesi deploy` command **does not exist in Cartesi CLI
-v2.0-alpha**. It was removed. Deployment in v2 is done via Docker Compose.
+**Cause**: In Cartesi CLI v2.0-alpha `cartesi deploy` is a deprecated stub
+(older alphas had no such command at all). Deployment in v2 is done via Docker
+Compose and `cartesi-rollups-cli`.
 
 **Fix**: Use the `cartesi-deploy` skill. The correct deployment flow is:
 
 1. `cartesi build` to build the machine snapshot
-2. Download `compose.local.yaml` from the Mugen-Builders repo
+2. Download `compose.local.yaml` from the Mugen-Builders repo and patch it
 3. Create `.env` with your chain configuration
 4. `docker compose -f compose.local.yaml --env-file .env up -d`
 5. Register the app with `cartesi-rollups-cli deploy application` inside the
@@ -111,7 +115,7 @@ Additional Dockerfile signals that confirm the version:
 | Single-stage build                 | v1.5 pattern       |
 | Multi-stage build (`AS base`)      | v2.0-alpha pattern |
 | `APT_UPDATE_SNAPSHOT=...`          | v2.0-alpha only    |
-| `ENTRYPOINT ["rollup-init"]`       | v1.5 only          |
+| `ENTRYPOINT ["rollup-init"]`       | Not a version marker — v1.5 and most v2 templates use it; v2 JS/TS templates use `ENTRYPOINT ["node"]` with `@cartesi/rollup` |
 | Tools installed as `.deb` package  | v2.0-alpha         |
 | Tools installed as `.tar.gz`       | v1.5               |
 
@@ -122,16 +126,44 @@ rm -rf .cartesi/image/
 cartesi build
 ```
 
-### Symptom: `cartesi send` command not found (v2.0-alpha)
+### Symptom: Machine built by an older CLI will not load
 
-The `cartesi send` command may not be available in all v2.0-alpha releases.
-Use `cast` (Foundry) to send inputs directly:
+After upgrading to CLI alpha.42 / node alpha.14 the node or `cartesi run`
+refuses an existing `.cartesi/image/`.
+
+**Cause**: alpha.42 requires cartesi-machine 0.22. Machines stored by 0.21 or
+earlier cannot be loaded, and all machine hashes change.
+
+**Fix**: `cartesi build` again with the new CLI, then redeploy the application
+(the template hash is part of the on-chain application). Start the node on a
+fresh database.
+
+### Symptom: `Unknown key '<key>' in [<table>]` from `cartesi build` / `run`
+
+**Cause**: since CLI alpha.41, `cartesi.toml` keys the CLI does not read are
+errors — a typo, a key of another drive builder, or a removed feature such as
+`[withdrawal.config]`.
+
+**Fix**: the message lists the accepted keys for that table; correct or remove
+the key. Replace `[withdrawal.config]` by marking the accounts drive with
+`accounts_drive = true` (see `cartesi-contracts`).
+
+### Symptom: `cartesi send` rejects `--hex`, or the input comes from the wrong account
+
+`cartesi send` exists in v2.0-alpha. Use `--encoding hex|string|abi|abi-packed`
+(there is no `--hex` flag). Since alpha.42 `send` and `deposit` sign with
+**devnet account 8** by default, because account 0 signs the node's claims;
+pass `--from <address>` to choose another devnet account. A backend that
+hard-codes the old default sender (`0xf39F…2266`) will see a different
+`msg_sender`.
+
+To send with `cast` instead, target the proxied Anvil endpoint:
 
 ```sh
-cast send <InputBox-address> \
-  "addInput(address,bytes)" <app-address> <hex-payload> \
-  --rpc-url http://localhost:8545 \
-  --private-key <funded-key>
+cast send $(cartesi address-book InputBox) \
+  "addInput(address,bytes)" $(cartesi address-book Application) <hex-payload> \
+  --rpc-url http://127.0.0.1:6751/anvil \
+  --private-key <devnet-key-other-than-account-0>
 ```
 
 Or use the `cartesi-rollups-cli send` command inside the compose advancer:
@@ -205,17 +237,59 @@ cartesi run
 
 Replace `<app-name>` with the name from `cartesi create`.
 
-### Symptom: `cartesi run` starts but ports are wrong
+### Symptom: `ECONNREFUSED` on `localhost:8545`
 
-`cartesi run` prints actual ports on startup. Read those — do not assume
-defaults. Update all CLI commands and frontend proxies to use the printed ports.
+`cartesi run` does **not** expose Anvil on port 8545. Everything is behind one
+port (default `6751`, printed as `starting at http://127.0.0.1:<port>`):
 
-### Symptom: Inspect URL returns 404 or connection refused
+| Path | Service |
+| ---- | ------- |
+| `/anvil` | L1 JSON-RPC (use as `--rpc-url`, wagmi/viem transport, forge) |
+| `/rpc` | Cartesi JSON-RPC API |
+| `/inspect/<app-name>` | Inspect |
+| `/explorer` | Explorer — only when started with `--services explorer` |
 
-- Confirm the URL format: `http://localhost:<port>/inspect/<app-name>`
+If `6751` is taken the CLI picks the next free port up to `6761` — read the
+printed address and update every command and frontend config.
+
+### Symptom: `cartesi run` rejects `CARTESI_BLOCKCHAIN_HTTP_ENDPOINT` or `--default-block pending`
+
+- A `CARTESI_BLOCKCHAIN_HTTP_ENDPOINT` exported in the shell must be an
+  http(s) URL with a DNS name or IP address; the CLI now validates it before
+  starting. Unset it for a plain local run.
+- `--default-block` accepts only `latest`, `safe` or `finalized`.
+
+### Symptom: Inspect URL returns 404, 503 or connection refused
+
+- Confirm the URL format: `http://127.0.0.1:<port>/inspect/<app-name>`
 - Confirm `<port>` matches what `cartesi run` printed
-- Confirm the app name matches what was created with `cartesi create`
-- Check containers are still running: `docker ps`
+- `404`: the app name is unknown — it is the project (directory) name unless
+  `--project-name` was passed
+- `503`: the machine is not ready yet, the application was foreclosed, its
+  execution terminated, or inspect capacity is exhausted
+- Check the environment: `cartesi status`, `cartesi logs`
+
+### Symptom: Inspect handler receives `{"payload":"0x..."}` instead of the route
+
+The node passes the **raw request body** to the backend as the inspect payload.
+A JSON-wrapped body is delivered literally, so route matching fails silently.
+
+```sh
+# Wrong
+curl -X POST .../inspect/<app> -H "Content-Type: application/json" -d '{"payload":"0x7374617473"}'
+# Right
+curl -X POST .../inspect/<app> -H "Content-Type: application/octet-stream" --data-binary 'stats'
+```
+
+In a frontend, send the bytes as the `fetch` body, not `JSON.stringify(...)`.
+
+### Symptom: JSON-RPC returns `-32602 Invalid parameters`, or the result looks empty
+
+- `params` should be an **object** (`"params":{"application":"my-dapp"}`), not an
+  array wrapping the object.
+- Indexes are hex strings (`"0x0"`).
+- Results are under `result.data` (lists also have `result.pagination`). Code
+  reading `result.status` or `parseInt(result, 16)` gets `undefined` / `NaN`.
 
 ### Symptom: State seems unchanged after advance input
 
@@ -225,8 +299,8 @@ Possible causes:
    the error:
 
    ```sh
-   # With cartesi run — use JSON-RPC (replace <port> with the printed JSON-RPC port)
-   curl -s -X POST "http://localhost:<port>/rpc" \
+   # With cartesi run — use JSON-RPC (default port 6751)
+   curl -s -X POST "http://127.0.0.1:6751/rpc" \
      -H "Content-Type: application/json" \
      -d '{"jsonrpc":"2.0","id":1,"method":"cartesi_listReports","params":{"application":"<app-name>"}}'
 
@@ -239,6 +313,10 @@ Possible causes:
 3. **Backend restarted and lost ephemeral state**: state is in-memory.
    Resend from scratch or use snapshots.
 4. **Input not yet processed**: wait and re-check, or lower polling interval.
+5. **Application stopped**: check `cartesi_getApplication` — a `status` other
+   than `OK` (see Layer 9) or `enabled=false` means inputs are not processed.
+   The input's own `status` (`REJECTED`, `EXCEPTION`, `MACHINE_HALTED`,
+   `OVERFLOW`, `UNEXPECTED_YIELD`, `INVALID_OUTPUTS_ROOT`) says how it ended.
 
 ---
 
@@ -304,7 +382,20 @@ Checks:
      -d '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}'
    ```
 2. Is `CARTESI_BLOCKCHAIN_ID` set to the correct chain ID?
-3. Is `CARTESI_BLOCKCHAIN_WS_ENDPOINT` set (required by EVM Reader)?
+3. `CARTESI_BLOCKCHAIN_WS_ENDPOINT` is **not** used any more — the node polls
+   over HTTP only. Remove it from old configs.
+4. Does the provider limit `eth_getLogs` ranges? Lower
+   `CARTESI_BLOCKCHAIN_MAX_BLOCK_RANGE` (default `2000`).
+
+### Symptom: Service refuses to start after a configuration change
+
+**Cause**: alpha.14 saves some settings in the database the first time each
+service starts — the default block policy (`CARTESI_BLOCKCHAIN_DEFAULT_BLOCK`)
+and the claim-submission mode (`CARTESI_FEATURE_CLAIM_SUBMISSION_ENABLED`). A
+later start with a different value stops.
+
+**Fix**: restore the original value, or start over with a fresh database.
+All services (EVM Reader, Claimer, PRT) must share the same default block.
 
 ---
 
@@ -355,6 +446,18 @@ If disabled, enable it:
 ```sh
 cartesi-rollups-cli app status myapp enabled
 ```
+
+### Symptom: PRT deploy fails, or a PRT app never advances
+
+1. `CARTESI_CONTRACTS_DAVE_APP_FACTORY_ADDRESS` must be set to the Dave
+   3.0.0-alpha.6 factory **for that chain** (it differs per chain).
+2. The `prt` service must be running (`cartesi-rollups-prt`) and its own
+   signer (`CARTESI_PRT_AUTH_*`, separate from `CARTESI_AUTH_*`) must be
+   funded.
+3. Follow the tournament: `cartesi-rollups-cli read tournaments <app>`,
+   `read commitments <app>`, `read matches <app>`, or the JSON-RPC PRT methods.
+4. A long wait at `CLAIM_STAGED` is the claim staging period; sentries that
+   agree with the claim shorten it.
 
 ---
 
@@ -422,8 +525,9 @@ export CARTESI_BLOCKCHAIN_ID=31337   # adjust to actual value
 
 1. Confirm the inspect endpoint URL is correct:
    ```sh
-   export CARTESI_INSPECT_ADDRESS=http://localhost:10012
+   export CARTESI_INSPECT_URL=http://localhost:10012
    ```
+   (`CARTESI_INSPECT_ADDRESS` is the service's listen address, `:10012`.)
 2. Confirm the route string matches what the backend handles:
    ```sh
    # Backend handles route "stats" — call with exactly "stats"
@@ -472,13 +576,16 @@ cast block <block-number> --rpc-url <RPC_URL>
 ### Symptom: Voucher cannot be executed — epoch not yet accepted
 
 Vouchers require the epoch to be closed and the claim **accepted**. On
-contracts v3 Authority/Quorum, acceptance follows staging:
+contracts v3, acceptance follows staging:
 
 ```sh
 cartesi-rollups-cli read epochs <app-name>
 # Authority/Quorum: CLAIM_SUBMITTED → CLAIM_STAGED → CLAIM_ACCEPTED
-# PRT: skips CLAIM_STAGED
+# PRT:              CLAIM_COMPUTED → (tournament) → CLAIM_STAGED → CLAIM_ACCEPTED
 ```
+
+With `cartesi run`, the default epoch length is 720 blocks — pass
+`--epoch-length 10` to see epochs accepted quickly.
 
 If the epoch is `CLAIM_SUBMITTED` or `CLAIM_STAGED`, wait for the staging
 period to elapse and for `acceptClaim` to succeed. Reduce epoch length or
@@ -488,9 +595,12 @@ period to elapse and for `acceptClaim` to succeed. Reduce epoch length or
 
 1. Confirm enough blocks have passed (`claim_staging_period` from deploy).
 2. Check claimer logs for repeated `acceptClaim` failures.
-3. Set `CARTESI_CLAIMER_MAX_ACCEPT_ATTEMPTS` (default `5`) — exceeding it
-   moves the app to `FAILED`.
+3. `CARTESI_CLAIMER_MAX_ACCEPT_ATTEMPTS` no longer exists in alpha.14 — remove
+   it from old configs. If the application moved to `FAILED`, read `reason`
+   (`app status` / `cartesi_getApplication`), repair the cause, then re-enable
+   with `app status <app> enabled`.
 4. Early `acceptClaim` (before staging period) reverts on-chain — expected.
+5. Check the signer is funded and is not shared with another sending process.
 
 ---
 
@@ -501,22 +611,37 @@ period to elapse and for `acceptClaim` to succeed. Reduce epoch length or
 **Cause:** Old node binary, wrong contract suite, or JSON-RPC client still
 expecting the deprecated `state` field.
 
-**Fix:** Verify `cartesi-rollups-runtime` image tag in `compose.local.yaml`
-matches `cartesi-rollups 3.0.0-alpha.6`. Update clients to read `enabled` +
-`status`. See `cartesi-jsonrpc`.
+**Fix:** Verify the `cartesi/rollups-runtime` image tag in `compose.local.yaml`
+(`0.12.0-alpha.45` for node alpha.14, contracts `cartesi-rollups`
+3.0.0-alpha.10). Update clients to read `enabled` + `status` from
+`result.data`. See `cartesi-jsonrpc`.
 
 ### Symptom: Node behaves erratically after upgrade
 
-**Cause:** Reused v2-alpha database against v3 node (migration `000001` changed).
+**Cause:** Reused a database created by an earlier node. The single migration
+(`000001`) is edited in place between alphas while the schema version stays
+the same, so the node's version check does not catch it.
 
 **Fix:** `docker compose -f compose.local.yaml down -v` and start with a
-fresh database. Do not reuse a v2-alpha DB without an explicit migration plan.
+fresh database on every node version bump (required for alpha.14).
 
-### Symptom: App `status=FORECLOSED` — is this corruption?
+### Symptom: App `status` is not `OK` — what does it mean?
 
-**No.** `FORECLOSED` is the normal emergency path after guardian `foreclose()`.
-A healthy foreclosed app is typically `enabled=true`, `status=FORECLOSED`,
-`foreclose_block > 0`. Use `INOPERABLE` for local mismatch or corruption.
+| `status` | Meaning | Action |
+| -------- | ------- | ------ |
+| `FAILED` | Recoverable node-side failure (for example OOM or a process crash) | Read `reason`, repair, verify snapshot/database consistency, then `app status <app> enabled` (clears `FAILED`) |
+| `DIVERGED` | The node's computed claim disagrees with the chain | Terminal for this node instance — investigate determinism and the template hash; do not just re-enable |
+| `CORRUPTED` | Local state missing or inconsistent | Terminal — rebuild the node state from a fresh database |
+| `GUEST_EXCEPTION`, `MACHINE_HALTED`, `MCYCLE_OVERFLOW`, `UNEXPECTED_YIELD`, `INVALID_OUTPUTS_ROOT` | The application's own execution ended the machine | Fix the backend (see `reason` and the last input's `status`), rebuild and redeploy |
+
+The `INOPERABLE` and `FORECLOSED` values of earlier alphas no longer exist.
+
+### Symptom: App was foreclosed — is this corruption?
+
+**No.** Foreclosure is the normal emergency path after guardian `foreclose()`.
+It is not a `status` value: a healthy foreclosed app is typically
+`enabled=true`, `status=OK`, with a non-zero `foreclose_block`. Inspect
+requests return `503` for a foreclosed app.
 
 ### Symptom: Foreclose succeeds but no withdrawal rows
 
@@ -528,9 +653,21 @@ is proved on L1. See `cartesi-deploy` Step 8b and `cartesi-contracts`.
 
 ### Symptom: `cartesi-rollups-cli foreclose` / `withdraw` not found
 
-**Cause:** Using `cartesi run` only — internal operator CLI requires compose.
+**Cause:** `cartesi-rollups-cli` is not installed on the host.
 
-**Fix:** Switch to compose deployment (`cartesi-deploy`).
+**Fix:** With `cartesi run`, use the host CLI wrappers — `cartesi foreclose`,
+`cartesi withdraw --account <address>`, `cartesi refund <input-index>`. With a
+compose deployment, run `cartesi-rollups-cli` inside the advancer container
+(`cartesi-deploy` Step 8b).
+
+### Symptom: Deposit made just before foreclosure is missing
+
+**Cause:** its epoch was never accepted, so it is not in the proved accounts
+drive.
+
+**Fix:** refund it — `cartesi-rollups-cli refund <app> <input-index> --input-file <file>`
+(the file holds the 0x-prefixed `InputAdded.input` bytes; required there) (or
+`cartesi refund <input-index>` locally).
 
 ### Symptom: Bad withdrawal config at deploy
 
@@ -565,16 +702,23 @@ cartesi-rollups-node
 ```sh
 docker ps
 docker logs <container-id>
+
+# With cartesi run
+cartesi status
+cartesi logs -f                 # node + PRT nodes; `cartesi logs <service>` for one
 ```
+
+Per-service log levels: `CARTESI_LOG_LEVEL_ADVANCER`, `_CLAIMER`,
+`_EVM_READER`, `_JSONRPC_API`, `_PRT`, `_VALIDATOR`.
 
 ### Inspect database state directly
 
 ```sh
-psql "postgres://postgres:password@localhost:5432/postgres"
-# List tables
+psql "postgres://postgres:password@localhost:5432/rollupsdb"
+# List tables (application, epoch, input, output, report, withdrawal, …)
 \dt
 # Check inputs
-SELECT * FROM inputs ORDER BY id DESC LIMIT 10;
+SELECT epoch_index, index, status FROM input ORDER BY index DESC LIMIT 10;
 ```
 
 ### Decode hex payloads on the fly
@@ -595,8 +739,14 @@ https://www.4byte.directory/ — paste the 4-byte selector to identify the error
 
 | Error message                        | Cause                                | Fix                                                                                    |
 | ------------------------------------ | ------------------------------------ | -------------------------------------------------------------------------------------- |
-| `unknown command 'deploy'`           | `cartesi deploy` removed in v2 alpha | Use Docker Compose deployment (`cartesi-deploy` skill)                                 |
-| `cartesi send` not found             | May not exist in v2.0-alpha          | Use `cast send` or `cartesi-rollups-cli send` inside container                         |
+| `deploy command is deprecated`       | `cartesi deploy` is a stub in v2 alpha | Use Docker Compose deployment (`cartesi-deploy` skill)                               |
+| `cartesi send --hex` rejected        | Flag does not exist                  | `cartesi send --encoding hex 0x…`                                                      |
+| `ECONNREFUSED 127.0.0.1:8545`        | Anvil is not exposed by `cartesi run` | Use `http://127.0.0.1:<port>/anvil`                                                    |
+| `-32602 Invalid parameters`          | JSON-RPC `params` sent as an array   | Send `params` as an object                                                             |
+| Inspect route never matches          | JSON-wrapped inspect body            | POST the raw payload as `application/octet-stream`                                     |
+| `Unknown key '…' in […]`             | Unrecognised `cartesi.toml` key      | Fix or remove the key; `[withdrawal.config]` is gone                                   |
+| Portal deposit reverts               | v2 function name (`depositERC20Tokens`) | Use v3 names (`depositErc20Tokens`, …)                                              |
+| Stored machine will not load         | Built for cartesi-machine ≤ 0.21     | `cartesi build` with CLI alpha.42, redeploy                                            |
 | Image incompatible with node         | CLI version mismatch                 | Check Dockerfile for `MACHINE_EMULATOR_TOOLS_VERSION` vs `MACHINE_GUEST_TOOLS_VERSION` |
 | `application name is already in use` | Old Docker Compose project running   | `docker compose -p <app> down`                                                         |
 | `invalid chain id for signer`        | Chain ID mismatch                    | Align `CARTESI_BLOCKCHAIN_ID` with RPC                                                 |
@@ -605,13 +755,15 @@ https://www.4byte.directory/ — paste the 4-byte selector to identify the error
 | `insufficient funds`                 | Wallet has no ETH                    | Fund wallet or use Anvil default mnemonic                                              |
 | Inspect returns no reports           | Handler not emitting report          | Always emit a report, even on error                                                    |
 | State unchanged after advance        | Input rejected or still processing   | Read reports, check handler return value                                               |
-| Voucher not executable               | Epoch not yet `CLAIM_ACCEPTED`       | Wait through `CLAIM_STAGED` + staging period (Authority/Quorum)          |
-| Epoch stuck at `CLAIM_STAGED`        | Staging period not elapsed / claimer | Wait blocks; check `CARTESI_CLAIMER_MAX_ACCEPT_ATTEMPTS` and claimer logs |
+| Voucher not executable               | Epoch not yet `CLAIM_ACCEPTED`       | Wait through `CLAIM_STAGED` + staging period                             |
+| Epoch stuck at `CLAIM_STAGED`        | Staging period not elapsed / claimer | Wait blocks; check claimer (or prt) logs and signer funds                |
 | `enabled`/`status` missing           | Old node or wrong contract suite     | Verify runtime image tag; update JSON-RPC clients                        |
-| `FORECLOSED` after foreclose         | Normal emergency path                | Not corruption — proceed with prove-drive-root → withdraw                  |
+| Non-zero `foreclose_block`           | Normal emergency path                | Not corruption — proceed with prove-drive-root → withdraw (refund for unfinalized deposits) |
+| `status` `DIVERGED` / `CORRUPTED`    | Terminal local fault                 | See Layer 9; do not simply re-enable                                     |
 | No withdrawal rows after foreclose   | Drive root not proved                | Run `prove-drive-root` before `withdraw`                                 |
-| Internal CLI not found               | `cartesi run` only                   | Use compose deployment (`cartesi-deploy`)                                |
-| v2 DB + v3 node                      | Schema mismatch                      | `docker compose down -v`; fresh database                               |
+| Internal CLI not found               | Not installed on the host            | `cartesi foreclose/withdraw/refund`, or exec into the node container     |
+| Old database + new node              | Schema changed in place              | `docker compose down -v`; fresh database                               |
+| Startup stops on config mismatch     | Saved default block / claim mode changed | Restore the value or start on a fresh database                       |
 | Unknown 4-byte selector in revert    | Missing custom error ABI             | Add custom errors to ABI, check 4byte.directory                                        |
 
 ---
@@ -654,14 +806,16 @@ After completing this skill, report back to the user with:
 - [ ] Verified project version from Dockerfile (`MACHINE_EMULATOR_TOOLS_VERSION` vs `MACHINE_GUEST_TOOLS_VERSION`)
 - [ ] Confirmed Docker is running: `docker info`
 - [ ] Confirmed `cartesi --version` output matches the project's Dockerfile version marker
-- [ ] For deploy failures: verified `cartesi deploy` does not exist in v2.0-alpha — used compose instead
+- [ ] For deploy failures: `cartesi deploy` is a deprecated stub in v2.0-alpha — used compose instead
 - [ ] For node failures: checked Postgres, DB connection string, and migration status
 - [ ] For advance not processing: verified InputBox address (from `cartesi address-book`), EVM Reader logs, and on-chain tx
-- [ ] For inspect issues: confirmed URL format, port, and that handler emits at least one report
-- [ ] For voucher failures: confirmed epoch `status == "CLAIM_ACCEPTED"` (via `CLAIM_STAGED` on Authority/Quorum)
-- [ ] For v3: distinguished `FORECLOSED` (normal) from `INOPERABLE` (corruption/mismatch)
+- [ ] For inspect issues: confirmed URL format, port, raw (non-JSON) request body, and that handler emits at least one report
+- [ ] For JSON-RPC issues: object `params`, hex indexes, results read from `result.data`
+- [ ] For `cartesi run`: used `<port>/anvil` as the L1 RPC, not `localhost:8545`
+- [ ] For voucher failures: confirmed epoch `status == "CLAIM_ACCEPTED"` (after `CLAIM_STAGED`)
+- [ ] For v3: distinguished foreclosure (non-zero `foreclose_block`, normal) from terminal statuses (everything except `OK` and `FAILED`) and from `FAILED` (recoverable)
 - [ ] For foreclosure: verified prove-drive-root before expecting withdrawal rows
-- [ ] For version upgrade: ruled out v2-alpha DB reuse against v3 node
+- [ ] For version upgrade: fresh database, machine rebuilt for cartesi-machine 0.22, contract addresses from 3.0.0-alpha.10
 - [ ] Unknown selectors looked up at https://www.4byte.directory/
 
 ## What comes next
